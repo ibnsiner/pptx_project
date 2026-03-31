@@ -1,0 +1,210 @@
+---
+alwaysApply: true
+---
+
+# 일반 코딩 규칙
+
+프로젝트 전반에 적용되는 기본 규칙입니다.
+
+## 1. 이모지 사용 금지
+
+**모든 코드, 주석, 로그, 문서에서 이모지 사용을 절대 금지합니다.**
+
+### 금지 대상
+```
+- 소스 코드 (.ts, .tsx, .js, .jsx)
+- 주석 (// 주석, /* 주석 */)
+- console.log() 출력
+- Write-Host 터미널 출력
+- README.md, 문서 파일
+- commit 메시지
+```
+
+### 대체 방안
+```typescript
+// ❌ 금지
+console.log('🚀 서버 시작')
+Write-Host "✅ 완료" -ForegroundColor Green
+
+// ✅ 권장
+console.log('[START] Server starting...')
+Write-Host "[OK] Completed" -ForegroundColor Green
+
+// 상태 표시
+console.log('[INFO] Processing...')
+console.log('[SUCCESS] Done')
+console.log('[ERROR] Failed')
+console.log('[WARNING] Check this')
+```
+
+## 2. 로그 레벨 표기
+
+```typescript
+// 로그 레벨 prefix 사용
+console.log('[INFO] 일반 정보')
+console.log('[DEBUG] 디버그 정보')
+console.log('[SUCCESS] 성공')
+console.log('[ERROR] 에러 발생')
+console.log('[WARNING] 경고')
+
+// PowerShell
+Write-Host "[INFO] Processing..." -ForegroundColor Cyan
+Write-Host "[SUCCESS] Completed" -ForegroundColor Green
+Write-Host "[ERROR] Failed" -ForegroundColor Red
+Write-Host "[WARNING] Check required" -ForegroundColor Yellow
+```
+
+## 3. 시각적 구분 방법
+
+### 색상 사용 (터미널)
+```powershell
+# PowerShell 색상으로 구분
+Write-Host "[INFO] Message" -ForegroundColor Cyan
+Write-Host "[SUCCESS] Message" -ForegroundColor Green
+Write-Host "[ERROR] Message" -ForegroundColor Red
+Write-Host "[WARNING] Message" -ForegroundColor Yellow
+```
+
+### 구분선 사용
+```typescript
+console.log('================================')
+console.log('  Hybrid Refinancing Simulator')
+console.log('================================')
+console.log('Backend:  http://localhost:3001')
+console.log('Frontend: http://localhost:5173')
+console.log('================================')
+```
+
+## 4. 문서 작성 시
+
+### Markdown 헤더로 구분
+```markdown
+## 섹션 제목
+
+### 서브 섹션
+
+- 일반 리스트
+- 강조는 **볼드** 사용
+- 코드는 `백틱` 사용
+```
+
+### 체크리스트
+```markdown
+- [ ] 미완료 항목
+- [x] 완료 항목
+```
+
+### 상태 표시
+```markdown
+[필수] 필수 항목
+[선택] 선택 항목
+[권장] 권장 사항
+[금지] 금지 사항
+[참고] 참고 사항
+```
+
+## 5. 코드 주석
+
+```typescript
+// [TODO] 구현 예정
+// [FIXME] 수정 필요
+// [NOTE] 참고사항
+// [IMPORTANT] 중요
+// [WARNING] 주의
+
+// Phase 1: 독립 개발
+// Phase 2: 부분 통합
+// Phase 3: 완전 통합
+```
+
+## 6. 변수/함수 명명
+
+```typescript
+// ❌ 이모지 사용 금지
+const data = await fetchData(); // ✅ 완료
+
+// ✅ 명확한 주석
+const data = await fetchData(); // [OK] Data fetched successfully
+
+// 함수명으로 의도 표현
+function isValidScore(score: number): boolean { }
+function hasPermission(user: User, action: string): boolean { }
+```
+
+## 7. Git Commit 메시지
+
+```bash
+# ❌ 금지
+git commit -m "✅ Add pulse survey upload feature"
+
+# ✅ 권장
+git commit -m "[FEAT] Add FX simulation endpoint"
+git commit -m "[FIX] Fix CSV parsing bug"
+git commit -m "[DOCS] Update README"
+git commit -m "[REFACTOR] Improve error handling"
+```
+
+## 8. API 응답 메시지
+
+```typescript
+// API 응답은 한글 사용 가능 (이모지 제외)
+sendSuccess(res, {
+  message: '업로드가 완료되었습니다.',  // OK
+  count: 124
+});
+
+sendError(res, 400, '파일 형식이 올바르지 않습니다.');  // OK
+
+// ❌ 이모지 사용 금지
+sendSuccess(res, {
+  message: '✅ 업로드 완료!'  // 금지
+});
+```
+
+## 9. 테이블/리스트 표시
+
+### Markdown 테이블
+```markdown
+| 항목 | 상태 | 설명 |
+|------|------|------|
+| Backend | 완료 | Node.js + Express |
+| Frontend | 완료 | React + Vite |
+| DB | 완료 | Prisma + SQLite |
+```
+
+### 리스트
+```markdown
+**완료된 작업:**
+- 프로젝트 구조 생성
+- 의존성 설치
+- Prisma 초기화
+
+**진행 중:**
+- CSV 업로드 기능
+- 대시보드 UI
+
+**예정:**
+- 조직별 분석
+- 시계열 비교
+```
+
+## 10. 예외 상황
+
+### UI 컴포넌트 (불가피한 경우만)
+```tsx
+// 사용자에게 보이는 UI 텍스트는 예외적으로 허용
+<Button>확인</Button>  // OK
+<Badge>우수</Badge>    // OK
+
+// 하지만 이모지는 여전히 금지
+<Button>확인 ✅</Button>  // 금지
+```
+
+## 중요: 이모지 완전 금지
+
+- 코드에서 이모지 발견 시 즉시 제거
+- 터미널 출력에서 이모지 발견 시 즉시 제거
+- 문서에서 이모지 발견 시 즉시 제거
+- 주석에서 이모지 발견 시 즉시 제거
+
+**예외 없음**

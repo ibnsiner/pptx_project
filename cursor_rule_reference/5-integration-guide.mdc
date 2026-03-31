@@ -1,0 +1,82 @@
+---
+description: Hybrid Refinancing Simulator 연동 가이드 - 외부 API(BOK, yfinance) 및 Frontend-Backend API 계약
+---
+
+# Hybrid Refinancing Simulator 연동 가이드
+
+본 프로젝트는 **Python FastAPI Backend**와 **React/Next.js Frontend**가 분리되어 있으며, 외부 거시 지표 API를 선택적으로 연동합니다.
+
+## 1. 기술 스택 및 구조
+
+### 스택
+```
+Backend:  Python 3.9+ / FastAPI
+Data:     Pandas, NumPy (CSV 기반, DB 없음)
+External: yfinance (Global FX/Rates), BOK Open API (한국은행 금리)
+Frontend: React/Next.js, TypeScript, Tailwind, Recharts
+```
+
+### Backend 폴더 구조
+```
+backend/
+├── main.py              # FastAPI 앱, 라우터 등록
+├── data/
+│   └── debt_20251231.csv
+└── services/
+    ├── data_loader.py   # CSV 파싱, WABC 계산
+    ├── simulator.py     # FX Stress, Rollover 수식
+    └── macro_api.py     # BOK, yfinance 호출 (선택)
+```
+
+### Frontend 연동 요약
+- `types/api.ts`: API 요청/응답 TypeScript 인터페이스 (JSON 구조와 일치)
+- `hooks/useSimulation.ts`: GET/POST 호출 (React Query 또는 fetch)
+- 환경 변수: `NEXT_PUBLIC_API_URL` 또는 `VITE_API_URL` = Backend base URL (예: http://localhost:8000)
+
+## 2. API 계약 (Design Doc 준수)
+
+### Data Endpoints
+- `GET /api/wabc` → `{ total_debt_krw, current_wabc, last_updated }`
+- `GET /api/maturity-wall` → `[{ maturity_month, total_krw, by_company }, ...]`
+
+### Simulation Endpoints
+- `POST /api/simulate/fx`  
+  Body: `{ target_usd_krw, target_jpy_krw }`  
+  Response: `{ simulated_total_debt_krw, fx_loss_krw, affected_debt_count, breakdown_by_currency }`
+- `POST /api/simulate/rollover`  
+  Body: `{ start_date, end_date, krw_base_rate_change, credit_spread_change, target_company }`  
+  Response: `{ rolled_over_principal_krw, new_wabc, wabc_delta, additional_annual_interest_krw }`
+
+## 3. 외부 API (macro_api.py)
+
+### yfinance
+- 용도: 글로벌 FX, 금리 등 (선택적 실시간/기준 시나리오)
+- 사용 예: `yf.download('KRW=X', ...)` 또는 금리 티커
+
+### BOK Open API (한국은행)
+- 용도: 기준금리, CD 금리 등
+- API Key 필요 시 환경 변수 `BOK_API_KEY` 사용
+- 문서: 한국은행 경제통계시스템 API
+
+### 연동 원칙
+- Backend에서만 호출 (Frontend는 Backend API만 사용)
+- 실패 시 기본값 또는 캐시값 사용하여 시뮬레이션은 동작하도록 처리
+
+## 4. Frontend-Backend 연동 패턴
+
+### CORS
+- FastAPI에서 `CORSMiddleware`로 Frontend origin 허용 (예: http://localhost:3000)
+
+### 타입 안전성
+- `types/api.ts`에 모든 요청/응답 인터페이스 정의
+- 응답은 API 스펙 JSON과 동일한 필드명/타입 유지
+
+### 훅 패턴
+- `useWabc()`, `useMaturityWall()`: GET 데이터
+- `useSimulateFx(payload)`, `useSimulateRollover(payload)`: POST 후 결과 반영
+- 로딩/에러 상태는 훅 내부에서 관리하고 컴포넌트는 상태만 구독
+
+## 5. 중요 사항
+
+- API 경로와 JSON 구조는 Design Doc의 "API Specifications & JSON Data Structures"와 **엄격히 일치**해야 함.
+- CSV 컬럼: `잔액_원화`, `금리`, `상품구분`, `통화`, `상환일`, `회사명` 등 Design Doc 및 data_loader와 일치.

@@ -1,0 +1,558 @@
+---
+alwaysApply: true
+---
+
+# 한글 인코딩 처리 규칙
+
+**모든 파일 및 데이터 처리 시 UTF-8 인코딩을 필수로 사용**하여 한글 깨짐을 완벽하게 방지합니다.
+
+## 1. 파일 읽기/쓰기 인코딩
+
+### Python 파일 처리
+```python
+# ✅ 올바른 예 - 항상 encoding='utf-8' 명시
+with open('file.txt', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+with open('file.txt', 'w', encoding='utf-8') as f:
+    f.write('한글 테스트')
+
+# ❌ 잘못된 예 - encoding 미지정 (Windows에서 cp949 사용)
+with open('file.txt', 'r') as f:  # 절대 금지!
+    content = f.read()
+```
+
+### CSV 파일 처리 (Pandas)
+```python
+import pandas as pd
+
+# ✅ CSV 읽기 - UTF-8
+df = pd.read_csv('debt_20251231.csv', encoding='utf-8')
+
+# ✅ CSV 쓰기 - UTF-8-sig (Excel 한글 깨짐 방지)
+df.to_csv('output.csv', encoding='utf-8-sig', index=False)
+# utf-8-sig: BOM(Byte Order Mark) 포함하여 Excel에서 한글 정상 표시
+
+# ⚠️ Legacy 파일이 cp949인 경우 (예외적 상황)
+try:
+    df = pd.read_csv('legacy.csv', encoding='utf-8')
+except UnicodeDecodeError:
+    df = pd.read_csv('legacy.csv', encoding='cp949')
+    # 읽은 후 즉시 UTF-8로 재저장
+    df.to_csv('legacy_utf8.csv', encoding='utf-8-sig', index=False)
+```
+
+### Excel 파일 처리
+```python
+# openpyxl - 자동으로 UTF-8 처리
+import openpyxl
+
+wb = openpyxl.Workbook()
+ws = wb.active
+ws['A1'] = '한글 헤더'
+ws['B1'] = '데이터'
+wb.save('output.xlsx')
+
+# pandas로 Excel 읽기/쓰기
+df = pd.read_excel('data.xlsx')  # 자동 UTF-8
+df.to_excel('output.xlsx', index=False, engine='openpyxl')
+```
+
+## 2. JSON 파일 처리
+
+### Python JSON
+```python
+import json
+
+# ✅ JSON 읽기
+with open('data.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+
+# ✅ JSON 쓰기
+with open('data.json', 'w', encoding='utf-8') as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+    # ensure_ascii=False: 한글을 \uXXXX로 변환하지 않음
+```
+
+### TypeScript/Node.js JSON
+```typescript
+import fs from 'fs';
+
+// ✅ JSON 읽기
+const data = JSON.parse(fs.readFileSync('data.json', 'utf-8'));
+
+// ✅ JSON 쓰기
+fs.writeFileSync('data.json', JSON.stringify(data, null, 2), 'utf-8');
+```
+
+## 3. API 응답 인코딩
+
+### FastAPI (Python Backend)
+```python
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+# FastAPI는 자동으로 UTF-8 응답
+@app.get("/api/leaders")
+async def get_leaders():
+    return {
+        "leaders": [
+            {"name": "김경덕", "department": "배전품질보증팀"},
+            {"name": "박주범", "department": "해저품질보증팀"}
+        ]
+    }
+    # 자동으로 Content-Type: application/json; charset=utf-8
+```
+
+### Express (Node.js Backend)
+```typescript
+import express from 'express';
+
+const app = express();
+
+// ✅ 명시적 UTF-8 헤더 설정
+app.use((req, res, next) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
+
+app.get('/api/leaders', (req, res) => {
+  res.json({ 
+    leaders: [
+      { name: '김경덕', department: '배전품질보증팀' }
+    ]
+  });
+});
+```
+
+## 4. 데이터베이스 인코딩
+
+### SQLite (Prisma)
+```prisma
+// Prisma Schema - SQLite는 기본적으로 UTF-8 지원
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 한글 데이터 저장 가능
+model Leader {
+  id       String @id
+  name     String  // "김경덕" 등 한글 저장
+  division String  // "품질/생산기술본부/CQO"
+}
+```
+
+### MySQL (향후 마이그레이션 시)
+```prisma
+datasource db {
+  provider = "mysql"
+  url      = "mysql://user:pass@localhost:3306/dbcharset=utf8mb4"
+  // utf8mb4: 4바이트 UTF-8 (이모지 포함)
+}
+```
+
+## 5. 터미널 출력 인코딩
+
+### PowerShell UTF-8 설정
+```powershell
+# 세션 시작 시 자동 실행 (프로필에 추가 권장)
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001  # UTF-8 코드 페이지 (CP65001)
+```
+
+### Python 출력 인코딩
+```python
+# 스크립트 시작 시
+import sys
+import io
+
+# stdout을 UTF-8로 강제 설정
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+# 이후 print 문은 한글 정상 출력
+print("한글 테스트 출력")
+```
+
+### 로그 파일 기록
+```python
+import logging
+
+# ✅ UTF-8 로그 파일
+logging.basicConfig(
+    filename='app.log',
+    encoding='utf-8',  # Python 3.9+
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s'
+)
+
+logging.info('한글 로그 메시지')
+```
+
+## 6. 환경 변수 및 설정 파일
+
+### .env 파일
+```bash
+# .env 파일을 UTF-8로 저장
+DATABASE_URL="file:./pulse_survey.db"
+JWT_SECRET="한글도_가능한_시크릿"
+APP_NAME="Pulse Survey Manager"
+```
+
+### Python-dotenv 로드
+```python
+from dotenv import load_dotenv
+import os
+
+# ✅ UTF-8 인코딩 명시
+load_dotenv(encoding='utf-8')
+
+app_name = os.getenv('APP_NAME')  # "Pulse Survey Manager"
+```
+
+## 7. 파일 생성 시 인코딩 규칙
+
+### 파일 타입별 인코딩 표준
+
+| 파일 타입 | 인코딩 | BOM | 설명 |
+|----------|--------|-----|------|
+| `.py` | UTF-8 | ❌ 없음 | Python 소스 |
+| `.ts`, `.tsx` | UTF-8 | ❌ 없음 | TypeScript 소스 |
+| `.json` | UTF-8 | ❌ 없음 | JSON 데이터 |
+| `.csv` (Excel용) | UTF-8 | ✅ 있음 | Excel 호환 |
+| `.csv` (서버용) | UTF-8 | ❌ 없음 | 서버 처리 |
+| `.txt`, `.md` | UTF-8 | ❌ 없음 | 문서 |
+| `.env` | UTF-8 | ❌ 없음 | 환경 변수 |
+
+## 8. Cursor/VS Code 설정
+
+### .vscode/settings.json 생성
+```json
+{
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": false,
+  "files.eol": "\n",
+  "[python]": {
+    "files.encoding": "utf8"
+  },
+  "[typescript]": {
+    "files.encoding": "utf8"
+  },
+  "[typescriptreact]": {
+    "files.encoding": "utf8"
+  },
+  "[json]": {
+    "files.encoding": "utf8"
+  },
+  "[javascript]": {
+    "files.encoding": "utf8"
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.profiles.windows": {
+    "PowerShell": {
+      "source": "PowerShell",
+      "args": ["-NoExit", "-Command", "chcp 65001"]
+    }
+  }
+}
+```
+
+## 9. Git 설정
+
+### .gitattributes 생성
+```
+# 모든 텍스트 파일을 UTF-8로 처리
+* text=auto eol=lf
+
+# 소스 파일
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+
+# 데이터 파일
+*.json text eol=lf
+*.csv text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+
+# 설정 파일
+*.env text eol=lf
+.gitignore text eol=lf
+.cursorrules text eol=lf
+
+# 바이너리 파일
+*.xlsx binary
+*.pdf binary
+*.png binary
+*.jpg binary
+```
+
+## 10. 일반적인 인코딩 오류 및 해결
+
+### Error 1: UnicodeDecodeError
+```python
+# 오류: UnicodeDecodeError: 'cp949' codec can't decode byte...
+# 원인: encoding 파라미터 누락
+
+# ❌ 잘못된 코드
+with open('file.csv', 'r') as f:
+    data = f.read()
+
+# ✅ 수정
+with open('file.csv', 'r', encoding='utf-8') as f:
+    data = f.read()
+```
+
+### Error 2: Excel에서 한글 깨짐
+```python
+# 원인: BOM이 없는 UTF-8
+
+# ❌ 잘못된 코드
+df.to_csv('output.csv', encoding='utf-8', index=False)
+
+# ✅ 수정 - BOM 포함
+df.to_csv('output.csv', encoding='utf-8-sig', index=False)
+```
+
+### Error 3: 터미널 출력 깨짐
+```powershell
+# 해결: 터미널 코드 페이지를 UTF-8로 변경
+chcp 65001
+
+# Python 스크립트 내에서
+import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+```
+
+### Error 4: JSON API 응답 깨짐
+```python
+# ✅ FastAPI는 자동 처리되므로 문제 없음
+# ✅ ensure_ascii=False 확인
+import json
+json.dumps(data, ensure_ascii=False)
+```
+
+## 11. CSV 업로드 시 인코딩 자동 감지
+
+### 스마트 인코딩 감지
+```python
+import chardet
+
+def read_csv_smart(filepath):
+    """인코딩을 자동 감지하여 CSV 읽기"""
+    # 1. 인코딩 감지
+    with open(filepath, 'rb') as f:
+        raw_data = f.read()
+        result = chardet.detect(raw_data)
+        encoding = result['encoding']
+    
+    print(f"감지된 인코딩: {encoding}")
+    
+    # 2. 감지된 인코딩으로 읽기
+    df = pd.read_csv(filepath, encoding=encoding)
+    
+    # 3. UTF-8로 정규화하여 저장 (선택적)
+    # df.to_csv(filepath.replace('.csv', '_utf8.csv'), 
+    #           encoding='utf-8-sig', index=False)
+    
+    return df
+
+# 사용
+df = read_csv_smart('pulse_survey_raw.csv')
+```
+
+## 12. 프로젝트 전체 인코딩 표준
+
+### 파일 생성 시 반드시 확인
+- ✅ 모든 소스 코드: **UTF-8 without BOM**
+- ✅ CSV (Excel 전달용): **UTF-8 with BOM** (utf-8-sig)
+- ✅ CSV (서버 처리용): **UTF-8 without BOM**
+- ✅ JSON 파일: **UTF-8 without BOM**
+- ✅ 데이터베이스: **UTF-8** (SQLite 기본값)
+- ✅ 환경 변수: **UTF-8**
+
+### 줄바꿈 표준
+- ✅ 모든 텍스트 파일: **LF** (Unix 스타일)
+- ❌ CRLF (Windows 스타일) 사용 금지
+
+## 13. Pulse Survey CSV 특수 처리
+
+### 4행 헤더 CSV 파싱
+```python
+import pandas as pd
+
+# ✅ Pulse Survey CSV 전용 파서
+def parse_pulse_survey_csv(filepath):
+    """
+    Pulse Survey CSV 파일 파싱
+    - 4행 헤더 구조 처리
+    - 한글 문항명 보존
+    - 미평가 데이터 처리
+    """
+    # UTF-8로 읽기
+    df = pd.read_csv(filepath, encoding='utf-8', header=None)
+    
+    # 헤더 처리
+    section_row = df.iloc[0, 11:]  # L열부터 (섹션 이름)
+    question_row = df.iloc[1, 11:]  # L열부터 (역량 이름)
+    
+    # 데이터는 4행부터
+    data_df = df.iloc[4:].copy()
+    
+    # 컬럼명 설정 (한글 보존)
+    base_columns = [
+        '사용자 ID', 'Display Name', '본부', '부문/사업부/소/센터', 
+        '부서', '종합 평가', '참가자 범주', '참가자 컨텐트 ID',
+        '평가자 ID', '평가자 Name', '이메일'
+    ]
+    
+    question_columns = [
+        'PM1_1on1미팅', 'PM2_성과관리', 'PM3_구체적피드백',
+        'PM4_업무점검', 'PM5_정보공유', 'PM6_목표설정', 
+        'PM7_우선순위', 'IDP1_경력개발', 'IDP2_IDP피드백', 
+        'IDP3_IDP지원'
+    ]
+    
+    data_df.columns = base_columns + question_columns
+    
+    return data_df
+
+# 사용
+df = parse_pulse_survey_csv('pulse_survey_raw.csv')
+```
+
+## 14. 리포트 생성 시 인코딩
+
+### Excel 리포트
+```python
+from openpyxl import Workbook
+from openpyxl.styles import Font
+
+wb = Workbook()
+ws = wb.active
+
+# ✅ 한글 헤더
+headers = ['이름', '부서', '종합평가', 'PM평균', 'IDP평균']
+ws.append(headers)
+
+# ✅ 한글 데이터
+ws.append(['김경덕', '배전품질보증팀', 4.59, 4.71, 4.67])
+
+# 한글 폰트 설정 (선택)
+for cell in ws[1]:
+    cell.font = Font(bold=True)
+
+wb.save('리더_평가_리포트.xlsx')
+# 파일명에 한글 사용 가능 (Windows에서 정상 작동)
+```
+
+### PDF 리포트
+```python
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+# ✅ 한글 폰트 등록 필수
+pdfmetrics.registerFont(TTFont('NanumGothic', 'NanumGothic.ttf'))
+
+c = canvas.Canvas('리더_리포트.pdf', pagesize=A4)
+c.setFont('NanumGothic', 12)
+c.drawString(100, 800, '리더 평가 리포트')
+c.drawString(100, 780, '이름: 김경덕')
+c.save()
+```
+
+## 15. 프론트엔드 인코딩
+
+### React 컴포넌트
+```tsx
+// ✅ JSX/TSX 파일은 자동으로 UTF-8
+const LeaderCard = ({ name, department }: Props) => {
+  return (
+    <div>
+      <h3>{name}</h3>  {/* 한글 정상 표시 */}
+      <p>{department}</p>
+    </div>
+  );
+};
+```
+
+### API 호출 시
+```typescript
+// ✅ Fetch API는 자동으로 UTF-8 처리
+const response = await fetch('/api/leaders');
+const data = await response.json();  // 한글 정상 파싱
+```
+
+## 16. 금지 사항
+
+- ❌ **절대 금지**: `encoding` 파라미터 생략
+- ❌ **절대 금지**: `cp949`, `euc-kr` 등 레거시 인코딩 사용
+- ❌ **절대 금지**: `ensure_ascii=True` 사용 (JSON)
+- ❌ **절대 금지**: 파일 저장 시 인코딩 미확인
+- ❌ **절대 금지**: 바이너리 모드에서 텍스트 처리
+
+## 17. 체크리스트
+
+### 새 파일 생성 시
+- ✅ UTF-8 인코딩으로 저장
+- ✅ BOM 없음 (소스 코드)
+- ✅ BOM 포함 (Excel 전달용 CSV)
+- ✅ LF 줄바꿈
+- ✅ Git에 커밋 전 인코딩 재확인
+
+### 데이터 읽기 시
+- ✅ `encoding='utf-8'` 명시
+- ✅ 에러 발생 시 인코딩 감지 (chardet)
+- ✅ Legacy 파일은 UTF-8로 변환 후 저장
+
+### API 응답 시
+- ✅ `Content-Type: application/json; charset=utf-8` 확인
+- ✅ `ensure_ascii=False` 설정
+
+### 리포트 생성 시
+- ✅ Excel: utf-8-sig 사용
+- ✅ PDF: 한글 폰트 등록
+- ✅ 파일명에 한글 사용 가능
+
+## 18. 인코딩 테스트
+
+### 테스트 스크립트
+```python
+# test_encoding.py
+import sys
+
+print(f"기본 인코딩: {sys.getdefaultencoding()}")
+print(f"파일 시스템 인코딩: {sys.getfilesystemencoding()}")
+print(f"stdout 인코딩: {sys.stdout.encoding}")
+
+# 한글 테스트
+test_string = "한글 테스트 123 ABC !@#"
+print(test_string)
+
+# 파일 쓰기 테스트
+with open('test_한글.txt', 'w', encoding='utf-8') as f:
+    f.write(test_string)
+
+# 파일 읽기 테스트
+with open('test_한글.txt', 'r', encoding='utf-8') as f:
+    content = f.read()
+    assert content == test_string, "인코딩 오류!"
+
+print("✓ 인코딩 테스트 통과!")
+```
+
+## 중요: 모든 파일 작업 전 확인
+
+1. ✅ `encoding='utf-8'` 파라미터 추가했는가
+2. ✅ Excel 저장 시 `utf-8-sig` 사용했는가
+3. ✅ JSON 저장 시 `ensure_ascii=False` 설정했는가
+4. ✅ 터미널이 UTF-8 모드인가 (`chcp 65001`)
+5. ✅ 한글이 정상 표시되는가

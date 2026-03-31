@@ -1,0 +1,58 @@
+---
+alwaysApply: true
+---
+
+# Python 파서 마이크로서비스 (`parser-api`)
+
+무거운 PPTX 파싱은 **Next.js가 아닌** 별도 **FastAPI + python-pptx** 서버에서 수행합니다. Vercel 서버리스 타임아웃을 피하기 위함입니다.
+
+## 1. 가상환경 (필수)
+
+- 저장소 루트 또는 `parser-api` 아래 **단일** `venv` 사용 (중복 생성 금지)
+- Python 스크립트/uvicorn 실행 전 반드시 활성화: `.\venv\Scripts\Activate.ps1` (Windows)
+- 시스템 Python에 직접 `pip install` 금지
+
+### Monorepo 예시
+
+```text
+PPTX_Parsing/
+├── venv/
+├── frontend/          # Next.js (App Router)
+├── parser-api/        # FastAPI, python-pptx
+│   ├── requirements.txt
+│   └── (진입점 모듈)
+└── .cursor/rules/
+```
+
+### requirements.txt에 포함할 후보
+
+- `fastapi`, `uvicorn[standard]`, `python-pptx`, `python-multipart`, `python-dotenv`
+- Supabase Storage 업로드용: `supabase-py` 또는 HTTP 클라이언트
+- Pydantic v2
+
+## 2. 파싱 API 계약 (초안 업로드 단계)
+
+- 관리자 업로드 직후: **DB에 영구 저장하지 않고** 파싱 JSON + AI 메타데이터를 **응답 본문으로 반환**
+- 슬라이드 크기: `Presentation.slide_width` / `slide_height` (EMU) 기준
+- 좌표는 반드시 퍼센트로 정규화:
+
+```text
+left_percent   = (shape.left / slide_width) * 100
+top_percent    = (shape.top / slide_height) * 100
+width_percent  = (shape.width / slide_width) * 100
+height_percent = (shape.height / slide_height) * 100
+```
+
+- 텍스트/도형/이미지는 **통 슬라이드 이미지 한 장**으로 대체하지 않는다. 요소 단위 추출이 원칙이다.
+- 이미지/도형 등은 Supabase Storage에 올리고 **URL**을 JSON에 실은다.
+
+## 3. 실행 예 (개발)
+
+```powershell
+cd parser-api
+..\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m uvicorn main:app --reload --port 8000
+```
+
+포트는 팀 합의에 맞추되, 프론트 `NEXT_PUBLIC_*`와 일치시킨다.

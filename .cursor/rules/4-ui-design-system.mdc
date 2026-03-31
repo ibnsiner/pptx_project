@@ -1,0 +1,39 @@
+---
+globs: *.tsx,*.ts,*.css
+description: PPTX 포털 UI / SlideViewer / Tailwind 가이드
+---
+
+# PPTX 포털 UI (넷플릭스·노션 스타일 지향)
+
+깔끔한 카드 그리드, 여백, 타이포 일관성. **슬라이드 영역**은 아래 규칙이 우선한다.
+
+## 1. SlideViewer (필수 레이아웃)
+
+- 컨테이너: `aspect-ratio: 16/9`, `position: relative`
+- 자식 요소: `position: absolute`, `left/top/width/height`는 JSON의 **퍼센트 문자열**과 일치
+- 텍스트: **드래그 선택 가능**한 일반 HTML 텍스트 (이미지로 대체 금지)
+- 폰트 크기: 슬라이드 박스 기준 **vw/vh 또는 container query** 등 **상대 단위**로 스케일
+- `whitespace-pre-wrap` 등으로 줄바꿈 보존
+
+## 2. airppt-parser 관련 (중요)
+
+- GitHub `airppt-parser`는 **레퍼런스로만** 분석한다.
+- **`npm install`로 해당 패키지를 의존성에 넣지 않는다.** 알고리즘만 이해하고 **현재 스택(React/Next)에 직접 포팅**한다.
+
+## 3. 색상·타이포
+
+강의 포털에 맞는 **중립적·읽기 쉬운** 팔레트를 Tailwind 등으로 정한다 (차트 전용 라이브러리나 타 프로젝트 디자인 시스템에 의존하지 않음).
+
+- Primary, Gray 스케일, 성공/경고/에러는 팀이 한 번 정해 일관 적용
+- 본문 14px 전후, 제목은 단계별 `font-semibold` 등 계층 유지
+
+## 4. 포털·관리 화면 패턴
+
+- 강의 카드 그리드: 반응형 `grid`, 호버 시 테두리/그림자 미세 변화
+- 관리자 프리뷰: 슬라이드 미리보기 + **메타데이터 편집 폼**을 한 화면에서 동시에 볼 수 있게 (검수 플로우)
+- 로딩/빈 상태/에러 상태 항상 처리
+
+## 5. 접근성
+
+- 버튼·아이콘 버튼에 `aria-label` 등 적절히 부여
+- 키보드 포커스 링 유지

@@ -1,0 +1,26 @@
+---
+alwaysApply: true
+---
+
+# 한글 및 UTF-8
+
+## 1. 원칙
+
+- 소스/JSON/`.env`: **UTF-8 (소스는 BOM 없음)**
+- Python: `open(..., encoding="utf-8")`, `json.dump(..., ensure_ascii=False)`
+- Node: `readFileSync(path, "utf-8")`
+- PostgreSQL(Supabase): DB/클라이언트 UTF-8 유지
+
+## 2. Windows
+
+- PowerShell에서 출력 깨짐이 있으면 `chcp 65001` 또는 로그는 파일로 UTF-8 기록
+- Cursor 터미널 출력은 **영문** 위주 권장 (한글은 파일/API 본문에서 처리)
+
+## 3. Git
+
+- 텍스트는 LF 권장. `.gitattributes`로 `* text=auto eol=lf` 등 팀 규칙에 맞게 유지
+
+## 4. 금지
+
+- 인코딩 미지정 `open()` (Windows 기본 cp949 위험)
+- JSON에서 불필요한 `ensure_ascii=True`로 한글만 유니코드 이스케이프 처리

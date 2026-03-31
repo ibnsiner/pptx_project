@@ -1,0 +1,42 @@
+---
+alwaysApply: true
+---
+
+# Frontend: Next.js (App Router) + TypeScript + Tailwind
+
+## 1. 역할
+
+- 포털 UI, 관리자 `/admin/upload`, 뷰어, SSG로 **강의 목록 등 정적/준정적 페이지** 부담 최소화
+- Prisma로 Supabase(PostgreSQL) 접근
+- 파싱은 `parser-api`(FastAPI) 호출
+
+## 2. 디렉터리
+
+- UI 및 라우트는 `frontend/` (또는 지시서의 monorepo 루트 구조에 맞게 일관 유지)
+- 환경 변수 예: `NEXT_PUBLIC_PARSER_API_URL=http://localhost:8000`
+- 서버 전용 비밀은 `OPENAI_API_KEY` 등 **절대** `NEXT_PUBLIC_` 접두사 붙이지 않음
+
+## 3. 개발 서버
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+## 4. 성능 원칙
+
+- 뷰어 다수(약 500명) 가정: **SSG/ISR 등으로 HTML 생성 비용을 줄일 것**
+- 슬라이드 JSON 렌더는 클라이언트에서도 가능하나, **데이터 페칭 전략**은 과도한 서버 동작을 피하도록 설계
+
+## 5. 데이터 모델 (Prisma 요약)
+
+- `Lecture`: title, description, thumbnail, author, tags, slides 관계
+- `Slide`: slideNumber, lectureId, elements(Json)
+- `pgvector` 테이블/확장은 Supabase SQL 또는 Prisma raw query로 정합성 유지
+
+## 6. 플로우 준수
+
+1. Draft: 업로드 -> parser-api 응답만으로 프리뷰
+2. Preview & Verify: `SlideViewer` + 메타데이터 수정 폼
+3. Publish: "최종 등록" 시에만 Supabase(DB + Storage 확정 + 임베딩/pgvector)

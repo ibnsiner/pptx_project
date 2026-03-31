@@ -1,0 +1,233 @@
+---
+alwaysApply: true
+---
+
+# Python 가상환경 자동 관리
+
+이 프로젝트는 **Python 가상환경을 필수**로 사용합니다. 모든 Python 관련 작업은 반드시 가상환경 내에서 실행되어야 합니다.
+
+## 1. 가상환경 자동 활성화 규칙
+
+### 프로젝트 시작 시 (최우선 실행)
+```powershell
+# 1. 가상환경 존재 확인 및 생성/활성화
+if (Test-Path "venv") {
+    Write-Host "✓ 가상환경 활성화 중..." -ForegroundColor Green
+    .\venv\Scripts\Activate.ps1
+} else {
+    Write-Host "가상환경을 생성합니다..." -ForegroundColor Yellow
+    python -m venv venv
+    .\venv\Scripts\Activate.ps1
+    Write-Host "✓ 가상환경이 생성되고 활성화되었습니다." -ForegroundColor Green
+}
+```
+
+### 터미널 명령 실행 전 필수 체크
+- **모든 Python 스크립트 실행 전** 반드시 가상환경 활성화 확인
+- 프롬프트에 `(venv)` 표시가 없으면 자동으로 활성화
+- Backend 작업 시작 시 자동으로 가상환경 진입
+
+## 2. 의존성 자동 확인 및 설치
+
+### 가상환경 활성화 후 즉시 실행
+```powershell
+# backend/requirements.txt 확인
+if (Test-Path "backend/requirements.txt") {
+    Write-Host "의존성을 확인합니다..." -ForegroundColor Cyan
+    
+    # 현재 설치된 패키지 목록
+    $installed = pip list --format=freeze
+    
+    # requirements.txt의 패키지들
+    $required = Get-Content backend/requirements.txt
+    
+    # 누락된 패키지만 설치
+    pip install -r backend/requirements.txt --quiet
+    
+    Write-Host "✓ 의존성 확인 완료" -ForegroundColor Green
+}
+```
+
+### 스마트 패키지 설치
+```powershell
+# 개별 패키지 설치 전 확인
+function Install-IfMissing {
+    param($PackageName)
+    
+    $installed = pip show $PackageName 2>$null
+    if (-not $installed) {
+        Write-Host "설치 중: $PackageName" -ForegroundColor Yellow
+        pip install $PackageName --quiet
+    } else {
+        Write-Host "✓ $PackageName 이미 설치됨" -ForegroundColor Green
+    }
+}
+
+# 사용 예
+Install-IfMissing "pandas"
+Install-IfMissing "openpyxl"
+```
+
+## 3. Backend 서버 실행 시 자동화
+
+### 표준 실행 패턴
+```powershell
+# 1. Backend 디렉토리로 이동
+cd backend
+
+# 2. 가상환경 활성화
+.\venv\Scripts\Activate.ps1
+
+# 3. 의존성 확인
+if (Test-Path "requirements.txt") {
+    pip install -r requirements.txt --quiet
+}
+
+# 4. 서버 실행
+python -m uvicorn main:app --reload --port 3001
+```
+
+### 원라인 실행 (세미콜론 사용)
+```powershell
+cd backend; .\venv\Scripts\Activate.ps1; pip install -r requirements.txt --quiet; python -m uvicorn main:app --reload --port 3001
+```
+
+## 4. 가상환경 상태 확인
+
+### 체크 스크립트
+```powershell
+# 가상환경 활성화 여부 확인
+if (-not $env:VIRTUAL_ENV) {
+    Write-Host "[ERROR] Virtual env not activated" -ForegroundColor Red
+    Write-Host "Run: .\venv\Scripts\Activate.ps1" -ForegroundColor Yellow
+    exit 1
+} else {
+    Write-Host "[OK] venv active: $env:VIRTUAL_ENV" -ForegroundColor Green
+    Write-Host "Python 버전: $(python --version)" -ForegroundColor Cyan
+}
+```
+
+## 5. Monorepo 구조에서의 가상환경
+
+### 디렉토리 구조
+```
+refinancing_sim/
+├── venv/                    # Python 가상환경 (루트에 생성)
+├── backend/                 # Python FastAPI Backend
+│   ├── requirements.txt
+│   ├── main.py
+│   ├── data/
+│   └── services/
+├── frontend/                # React/Next.js Frontend
+│   ├── package.json
+│   └── ...
+└── .cursorrules
+```
+
+### Backend 작업 시 자동 진입
+```powershell
+# Backend 디렉토리 진입 시 자동으로 가상환경 활성화
+cd backend
+
+# 가상환경이 부모 디렉토리에 있는 경우
+if (Test-Path "..\venv") {
+    ..\venv\Scripts\Activate.ps1
+}
+```
+
+## 6. 필수 Python 패키지 (Backend)
+
+### requirements.txt 기본 구성
+```txt
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Data Engine
+pandas>=2.2.0
+numpy>=1.26.0
+
+# External API (거시 지표)
+yfinance>=0.2.0
+requests>=2.31.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.6
+```
+
+## 7. 금지 사항
+
+- ❌ 시스템 Python에 직접 패키지 설치 절대 금지
+- ❌ `pip install` 시 가상환경 확인 없이 실행 금지
+- ❌ 가상환경 없이 Python 스크립트 실행 금지
+- ❌ 여러 개의 가상환경 생성 금지 (venv 하나만 사용)
+
+## 8. 자동화 워크플로우
+
+### 프로젝트 첫 실행 시
+```powershell
+# Step 1: 가상환경 생성/활성화
+if (-not (Test-Path "venv")) {
+    python -m venv venv
+}
+.\venv\Scripts\Activate.ps1
+
+# Step 2: Python 버전 확인
+python --version
+
+# Step 3: pip 업그레이드
+python -m pip install --upgrade pip --quiet
+
+# Step 4: Backend 의존성 설치
+cd backend
+pip install -r requirements.txt
+
+Write-Host "[OK] Project setup complete" -ForegroundColor Green
+```
+
+### 일상적인 개발 시작 시
+```powershell
+# 간단한 체크 후 바로 시작
+.\venv\Scripts\Activate.ps1
+cd backend
+python -m uvicorn main:app --reload --port 3001
+```
+
+## 9. 가상환경 비활성화
+
+### 작업 종료 시
+```powershell
+# 가상환경 종료
+deactivate
+```
+
+## 10. 트러블슈팅
+
+### 가상환경 손상 시
+```powershell
+# 가상환경 삭제
+Remove-Item -Recurse -Force venv
+
+# 재생성
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r backend/requirements.txt
+```
+
+### PowerShell 실행 정책 오류
+```powershell
+# 오류: cannot be loaded because running scripts is disabled
+# 해결:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+## 중요: 모든 Python 명령 실행 전 체크리스트
+
+1. ✅ `(venv)` 프롬프트 표시 확인
+2. ✅ `$env:VIRTUAL_ENV` 변수 존재 확인
+3. ✅ `which python` 또는 `Get-Command python` 으로 venv의 Python 사용 확인
+4. ✅ 의존성 최신 상태 확인
+5. ✅ 명령 실행

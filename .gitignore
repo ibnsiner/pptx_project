@@ -1,0 +1,30 @@
+# sample uploads (do not commit user decks)
+*.pptx
+
+# env (never commit secrets)
+.env
+.env.local
+.env.*.local
+project_info.txt
+
+# dependencies
+node_modules/
+frontend/node_modules/
+parser-api/.venv/
+parser-api/venv/
+venv/
+.venv/
+parser-api/.env
+__pycache__/
+*.pyc
+.Python
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

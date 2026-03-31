@@ -1,0 +1,44 @@
+---
+alwaysApply: true
+---
+
+# 일반 코딩 규칙 (PPTX Portal)
+
+프로젝트 전반에 적용되는 기본 규칙입니다.
+
+## 1. 이모지 사용 금지
+
+**모든 코드, 주석, 로그, 문서에서 이모지 사용을 절대 금지합니다.**
+
+### 금지 대상
+
+- 소스 코드 (.ts, .tsx, .js, .jsx, .py)
+- 주석, console.log, Write-Host, README 등 문서
+- Git commit 메시지
+
+### 대체
+
+- 로그: `[INFO]`, `[DEBUG]`, `[SUCCESS]`, `[ERROR]`, `[WARNING]`
+- PowerShell: `-ForegroundColor Cyan/Green/Red/Yellow`로 구분
+
+## 2. Git Commit 메시지
+
+```text
+[FEAT] ...
+[FIX] ...
+[DOCS] ...
+[REFACTOR] ...
+```
+
+## 3. API 응답
+
+- 한글 메시지 사용 가능 (이모지 제외)
+- JSON은 UTF-8, 한글 필드는 이스케이프 최소화 (`ensure_ascii=False` 등)
+
+## 4. 코드 주석 태그
+
+- `[TODO]`, `[FIXME]`, `[NOTE]`, `[IMPORTANT]`, `[WARNING]`
+
+## 5. 변수/함수 명명
+
+의도가 드러나는 이름 사용. 불리언은 `is*`, `has*` 등.

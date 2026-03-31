@@ -1,0 +1,711 @@
+---
+alwaysApply: true
+---
+
+# PowerShell 명령어 사용 규칙
+
+이 프로젝트는 **Windows PowerShell** 환경에서 실행됩니다. Bash와 문법이 다르므로 반드시 준수해야 합니다.
+
+## ⚠️ 가장 중요: && 연산자 절대 금지
+
+### ❌ 절대 사용 금지
+```powershell
+# PowerShell은 && 연산자를 지원하지 않습니다!
+cd backend && npm install          # 파서 에러!
+npm install && npm run dev         # 작동 안 함!
+python script.py && echo "Done"    # 실패!
+
+# 오류 메시지: "The token '&&' is not a valid statement separator"
+```
+
+### ✅ 올바른 방법: 세미콜론(;) 사용
+```powershell
+# 세미콜론으로 명령 연결 (순차 실행)
+cd backend; npm install
+
+# 여러 명령 연결
+cd backend; npm install; npm run dev
+
+# 가상환경 활성화 후 실행
+.\venv\Scripts\Activate.ps1; python script.py
+
+# Frontend와 Backend 순차 설치
+cd frontend; npm install; cd ..\backend; npm install
+```
+
+### ✅ 조건부 실행 (앞 명령 성공 시에만)
+```powershell
+# 방법 1: $ 변수 사용
+npm install
+if ($) { npm run dev }
+
+# 방법 2: 한 줄로
+npm install; if ($) { npm run dev }
+
+# 방법 3: 명확한 조건문
+npm install
+if ($LASTEXITCODE -eq 0) {
+    npm run dev
+}
+```
+
+## 1. 명령어 연결 패턴
+
+### 순차 실행 (앞 명령 실패해도 계속)
+```powershell
+# 세미콜론 사용
+command1; command2; command3
+
+# 또는 줄바꿈
+command1
+command2
+command3
+```
+
+### 조건부 실행 (앞 명령 성공 시에만)
+```powershell
+# 방법 1
+command1; if ($) { command2 }
+
+# 방법 2
+command1
+if ($LASTEXITCODE -eq 0) { command2 }
+```
+
+### OR 실행 (앞 명령 실패 시)
+```powershell
+command1
+if (-not $) { command2 }
+```
+
+## 2. 경로 및 디렉토리
+
+### 경로 구분자
+```powershell
+# ✅ 모두 가능
+cd .\backend\src
+cd ./backend/src
+cd backend/src
+cd backend\src
+
+# 상대 경로
+cd ..                  # 부모 디렉토리
+cd ..\other-folder     # 부모의 형제 폴더
+```
+
+### 공백/한글이 있는 경로
+```powershell
+# ✅ 반드시 따옴표로 감싸기
+cd "C:\Program Files\NodeJS"
+cd "C:\Users\USER\Desktop\refinancing_sim"
+cd "프로젝트 폴더"
+
+# 파일 경로도 동일
+python "한글 스크립트.py"
+```
+
+## 3. 환경 변수
+
+### 변수 선언 및 사용
+```powershell
+# ✅ 일반 변수
+$PORT = 3001
+$NODE_ENV = "development"
+echo $PORT
+
+# ✅ 환경 변수 설정
+$env:NODE_ENV = "production"
+$env:PORT = 3001
+
+# 환경 변수 사용
+echo $env:NODE_ENV
+```
+
+### 임시 환경 변수 (명령 실행 시)
+```powershell
+# ❌ Bash 스타일 (작동 안 함!)
+NODE_ENV=production node server.js
+
+# ✅ PowerShell 방식
+$env:NODE_ENV="production"; node server.js
+
+# 또는
+$env:NODE_ENV="production"
+node server.js
+```
+
+## 4. 파일 및 디렉토리 작업
+
+### 생성
+```powershell
+# 디렉토리
+New-Item -ItemType Directory -Path "src\components"
+mkdir src\components  # 단축형
+
+# 파일
+New-Item -ItemType File -Path "src\index.ts"
+echo $null > src\index.ts  # 빈 파일
+```
+
+### 확인
+```powershell
+# 파일/폴더 존재 확인
+Test-Path "venv"
+Test-Path "backend\requirements.txt"
+
+# 조건부 실행
+if (Test-Path "venv") {
+    .\venv\Scripts\Activate.ps1
+}
+```
+
+### 복사/이동/삭제
+```powershell
+# 복사
+Copy-Item "source.txt" "dest.txt"
+cp source.txt dest.txt  # 별칭
+
+# 이동/이름 변경
+Move-Item "old.txt" "new.txt"
+mv old.txt new.txt  # 별칭
+
+# 삭제
+Remove-Item "file.txt"
+rm file.txt  # 별칭
+
+# 폴더 전체 삭제
+Remove-Item -Recurse -Force "folder"
+rm -r -Force folder
+```
+
+### 내용 확인
+```powershell
+# 파일 내용 출력
+Get-Content file.txt
+cat file.txt  # 별칭
+
+# 처음 10줄
+Get-Content file.txt -Head 10
+cat file.txt -Head 10
+```
+
+## 5. 패키지 관리자 명령
+
+### npm 명령
+```powershell
+# ✅ 의존성 설치
+cd frontend; npm install
+
+# ✅ 개발 서버 실행
+npm run dev
+
+# ✅ 빌드
+npm run build
+
+# ✅ 패키지 추가
+npm install react-query --save
+
+# ✅ 여러 패키지 동시 설치
+npm install axios zod react-hook-form
+```
+
+### pip 명령 (가상환경 내)
+```powershell
+# ✅ 가상환경 활성화 후 설치
+.\venv\Scripts\Activate.ps1; pip install pandas
+
+# ✅ requirements.txt 설치
+pip install -r backend/requirements.txt
+
+# ✅ 패키지 업그레이드
+pip install --upgrade pandas
+
+# ✅ 설치된 패키지 확인
+pip list
+pip show pandas
+```
+
+## 6. 백그라운드 실행
+
+### 프로세스 백그라운드 실행
+```powershell
+# ✅ 새 창에서 실행
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; npm run dev"
+
+# ✅ Job으로 실행
+Start-Job -ScriptBlock { cd backend; npm run dev }
+
+# Job 확인
+Get-Job
+
+# Job 중지
+Stop-Job -Name Job1
+Remove-Job -Name Job1
+```
+
+### Frontend + Backend 동시 실행
+```powershell
+# Terminal 1: Backend
+cd backend; .\venv\Scripts\Activate.ps1; python -m uvicorn main:app --reload --port 3001
+
+# Terminal 2: Frontend  
+cd frontend; npm run dev
+
+# 또는 Job으로 백그라운드 실행
+Start-Job -ScriptBlock { cd backend; python -m uvicorn main:app --reload }
+Start-Job -ScriptBlock { cd frontend; npm run dev }
+```
+
+## 7. 조건문과 반복문
+
+### If 조건문
+```powershell
+# 파일 존재 확인
+if (Test-Path "venv") {
+    Write-Host "가상환경 존재"
+} else {
+    Write-Host "가상환경 없음"
+}
+
+# 명령 성공 확인
+npm install
+if ($) {
+    Write-Host "설치 성공"
+} else {
+    Write-Host "설치 실패"
+}
+
+# 비교 연산
+if ($score -gt 4.5) {
+    Write-Host "우수"
+}
+```
+
+### 반복문
+```powershell
+# 배열 순회
+$files = @("file1.py", "file2.py", "file3.py")
+foreach ($file in $files) {
+    Write-Host "처리 중: $file"
+    python $file
+}
+
+# 숫자 범위
+1..5 | ForEach-Object {
+    Write-Host "번호: $_"
+}
+```
+
+## 8. 파이프라인 및 리디렉션
+
+### 출력 리디렉션
+```powershell
+# 파일로 출력 (덮어쓰기)
+npm list > packages.txt
+
+# 파일에 추가
+echo "로그" >> output.txt
+
+# 에러만 리디렉션
+npm install 2> errors.txt
+
+# 표준 출력 + 에러 모두
+npm install > log.txt 2>&1
+
+# 출력 버리기
+npm install > $null 2>&1
+```
+
+### 파이프라인
+```powershell
+# 프로세스 필터링
+Get-Process | Where-Object { $_.Name -like "node*" }
+
+# 문자열 검색
+npm list | Select-String "react"
+
+# 정렬
+Get-ChildItem | Sort-Object -Property Length -Descending
+```
+
+## 9. 유용한 PowerShell 명령어
+
+### 기본 명령
+```powershell
+# 현재 디렉토리
+Get-Location
+pwd
+
+# 디렉토리 내용
+Get-ChildItem
+ls
+dir
+
+# 디렉토리 트리 (recursive)
+Get-ChildItem -Recurse
+
+# 특정 파일 찾기
+Get-ChildItem -Recurse -Filter "*.csv"
+```
+
+### 프로세스 관리
+```powershell
+# 실행 중인 Node 프로세스 찾기
+Get-Process | Where-Object { $_.Name -like "node*" }
+
+# 특정 포트 사용 프로세스
+Get-NetTCPConnection -LocalPort 3001
+
+# 프로세스 종료
+Stop-Process -Name "node" -Force
+```
+
+### 환경 변수
+```powershell
+# 모든 환경 변수
+Get-ChildItem Env:
+
+# 특정 환경 변수
+echo $env:NODE_ENV
+echo $env:PATH
+
+# 환경 변수 설정
+$env:NODE_ENV = "development"
+```
+
+## 10. 스크립트 파일 실행
+
+### .ps1 스크립트 실행
+```powershell
+# ✅ 현재 디렉토리의 스크립트
+.\setup.ps1
+.\scripts\deploy.ps1
+
+# ✅ 절대 경로
+& "C:\Scripts\setup.ps1"
+```
+
+### 실행 정책 오류 해결
+```powershell
+# 오류: running scripts is disabled on this system
+# 임시 해결
+PowerShell -ExecutionPolicy Bypass -File .\setup.ps1
+
+# 영구 해결 (현재 사용자만)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# 확인
+Get-ExecutionPolicy
+```
+
+## 11. 실제 사용 예시
+
+### Pulse Survey Manager 서버 시작
+```powershell
+# ❌ 잘못된 예 (Bash 스타일)
+cd backend && source venv/bin/activate && python main.py
+
+# ✅ 올바른 예 (PowerShell)
+cd backend; ..\venv\Scripts\Activate.ps1; python -m uvicorn main:app --reload --port 3001
+```
+
+### Frontend + Backend 동시 실행
+```powershell
+# ❌ 잘못된 예
+cd frontend && npm run dev & cd backend && python main.py
+
+# ✅ 올바른 예 (Job 사용)
+Start-Job -ScriptBlock { 
+    cd "C:\Users\USER\Desktop\refinancing_sim\frontend"
+    npm run dev 
+}
+Start-Job -ScriptBlock { 
+    cd "C:\Users\USER\Desktop\refinancing_sim\backend"
+    ..\venv\Scripts\Activate.ps1
+    python -m uvicorn main:app --reload --port 3001
+}
+
+# Job 상태 확인
+Get-Job
+```
+
+### CSV 업로드 처리 스크립트
+```powershell
+# ❌ 잘못된 예
+source venv/bin/activate && python parse_csv.py input.csv && echo "완료"
+
+# ✅ 올바른 예
+.\venv\Scripts\Activate.ps1
+python parse_csv.py input.csv
+if ($) {
+    Write-Host "✓ CSV 파싱 완료" -ForegroundColor Green
+}
+```
+
+## 12. 명령어 비교표 (Bash vs PowerShell)
+
+| 작업 | Bash | PowerShell |
+|------|------|-----------|
+| 명령 연결 (순차) | `cmd1 && cmd2` | `cmd1; cmd2` |
+| 명령 연결 (조건부) | `cmd1 && cmd2` | `cmd1; if ($) { cmd2 }` |
+| OR 실행 | `cmd1 \|\| cmd2` | `cmd1; if (-not $) { cmd2 }` |
+| 백그라운드 | `cmd &` | `Start-Job { cmd }` |
+| 파이프 | `cmd1 \| cmd2` | `cmd1 \| cmd2` (동일) |
+| 환경 변수 설정 | `export VAR=val` | `$env:VAR = "val"` |
+| 환경 변수 사용 | `$VAR` | `$env:VAR` |
+| 현재 디렉토리 | `pwd` | `pwd` 또는 `Get-Location` |
+| 파일 존재 확인 | `[ -f file ]` | `Test-Path "file"` |
+| 디렉토리 확인 | `[ -d dir ]` | `Test-Path "dir"` |
+
+## 13. Monorepo 명령 패턴
+
+### 루트에서 모든 의존성 설치
+```powershell
+# ❌ Bash 스타일
+npm install && cd frontend && npm install && cd ../backend && pip install -r requirements.txt
+
+# ✅ PowerShell - 줄바꿈으로 분리
+npm install
+cd frontend
+npm install
+cd ..\backend
+..\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cd ..
+
+# ✅ PowerShell - 세미콜론으로 한 줄
+npm install; cd frontend; npm install; cd ..\backend; pip install -r requirements.txt; cd ..
+```
+
+### package.json 스크립트
+```json
+{
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && ..\\venv\\Scripts\\activate && python -m uvicorn main:app --reload"
+  }
+}
+```
+
+## 14. 일반적인 실수 모음
+
+### 실수 1: && 사용
+```powershell
+# ❌ 실수
+npm run build && npm start
+
+# ✅ 수정
+npm run build; npm start
+# 또는
+npm run build
+if ($) { npm start }
+```
+
+### 실수 2: export 사용
+```powershell
+# ❌ 실수
+export PORT=3001
+
+# ✅ 수정
+$env:PORT = 3001
+```
+
+### 실수 3: source 명령
+```powershell
+# ❌ 실수
+source venv/bin/activate
+
+# ✅ 수정
+.\venv\Scripts\Activate.ps1
+```
+
+### 실수 4: 경로 슬래시
+```powershell
+# ⚠️ 주의: PowerShell은 둘 다 가능하지만 일관성 유지
+cd backend/src        # 가능
+cd backend\src        # 가능 (PowerShell 전통 방식)
+
+# 추천: 백슬래시 사용 (Windows 표준)
+cd backend\src
+```
+
+### 실수 5: 따옴표 누락
+```powershell
+# ❌ 실수 (공백 있는 경로)
+cd C:\Program Files\NodeJS
+
+# ✅ 수정
+cd "C:\Program Files\NodeJS"
+```
+
+## 15. 유용한 별칭 (Alias)
+
+```powershell
+# PowerShell 기본 별칭
+ls    → Get-ChildItem
+dir   → Get-ChildItem
+cd    → Set-Location
+pwd   → Get-Location
+cp    → Copy-Item
+mv    → Move-Item
+rm    → Remove-Item
+cat   → Get-Content
+echo  → Write-Output
+
+# 별칭 확인
+Get-Alias
+
+# 별칭 정의 (세션용)
+Set-Alias ll Get-ChildItem
+```
+
+## 16. 실행 정책
+
+### 스크립트 실행 허용
+```powershell
+# 현재 정책 확인
+Get-ExecutionPolicy
+
+# 정책 변경 (관리자 권한 필요 없음)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# 또는 한 번만 우회
+PowerShell -ExecutionPolicy Bypass -File .\script.ps1
+```
+
+## 17. 프로젝트별 표준 명령어
+
+### Backend 시작
+```powershell
+# 표준 패턴
+cd backend
+..\venv\Scripts\Activate.ps1
+pip install -r requirements.txt --quiet
+python -m uvicorn main:app --reload --port 3001
+
+# 한 줄 버전
+cd backend; ..\venv\Scripts\Activate.ps1; pip install -r requirements.txt --quiet; python -m uvicorn main:app --reload --port 3001
+```
+
+### Frontend 시작
+```powershell
+cd frontend
+npm install
+npm run dev
+
+# 한 줄 버전
+cd frontend; npm install; npm run dev
+```
+
+### 전체 프로젝트 초기화
+```powershell
+# 가상환경 생성
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# Backend 설정
+cd backend
+pip install -r requirements.txt
+prisma generate
+prisma migrate dev --name init
+cd ..
+
+# Frontend 설정
+cd frontend
+npm install
+cd ..
+
+Write-Host "✓ 프로젝트 초기화 완료!" -ForegroundColor Green
+```
+
+## 18. 터미널 명령 체크리스트
+
+Cursor IDE에서 터미널 명령 실행 전 반드시 확인:
+
+1. ✅ `&&` 연산자 사용하지 않았는가
+2. ✅ 세미콜론(`;`)으로 명령을 연결했는가
+3. ✅ 경로에 공백/한글이 있으면 따옴표로 감쌌는가
+4. ✅ Python 명령 전에 가상환경을 활성화했는가
+5. ✅ 환경 변수는 `$env:VAR` 형식을 사용했는가
+
+## 19. 금지 명령어 목록
+
+PowerShell에서 절대 사용하면 안 되는 Bash 문법:
+
+- ❌ `&&` (and 연산자)
+- ❌ `||` (or 연산자)  
+- ❌ `export VAR=value`
+- ❌ `source script`
+- ❌ `VAR=value command`
+- ❌ `[ condition ]`
+- ❌ `$(command)` (PowerShell에서는 `$(command)` 가능하지만 의미 다름)
+
+## 20. 권장 사항
+
+### 복잡한 작업은 스크립트 파일로
+```powershell
+# setup.ps1 파일 생성
+param(
+    [switch]$SkipInstall
+)
+
+# 가상환경 설정
+if (-not (Test-Path "venv")) {
+    python -m venv venv
+}
+.\venv\Scripts\Activate.ps1
+
+# 의존성 설치
+if (-not $SkipInstall) {
+    cd backend
+    pip install -r requirements.txt
+    cd ..\frontend
+    npm install
+    cd ..
+}
+
+Write-Host "✓ 설정 완료!" -ForegroundColor Green
+
+# 사용
+.\setup.ps1
+.\setup.ps1 -SkipInstall
+```
+
+## 중요: && 연산자 절대 금지!
+
+PowerShell에서 `&&` 사용 시 즉시 파서 에러가 발생합니다.
+**모든 명령 연결은 세미콜론(`;`)을 사용하세요!**
+
+```powershell
+# 기억하세요:
+# Bash의 &&  →  PowerShell의 ;
+# Bash의 ||  →  PowerShell의 if (-not $)
+```
+
+## ⚠️ 한글 출력 제한 (Cursor IDE)
+
+**Cursor IDE의 터미널은 한글 출력 시 깨짐이 발생합니다.**
+
+```powershell
+# ❌ 한글 출력 (깨짐)
+Write-Host "설치 중..." -ForegroundColor Cyan
+
+# ❌ 이모지 출력 (금지)
+Write-Host "📦 Installing..." -ForegroundColor Cyan
+
+# ✅ 영어만 출력 (권장)
+Write-Host "Installing packages..." -ForegroundColor Cyan
+Write-Host "Done!" -ForegroundColor Green
+Write-Host "Server running..." -ForegroundColor Green
+
+# ✅ 한글은 로그 파일에 기록
+"설치 완료" | Out-File -FilePath "install.log" -Encoding UTF8
+```
+
+**규칙:**
+- 터미널 출력 (`Write-Host`, `echo`): 영어만 사용 (한글 금지)
+- 로그 파일: 한글 사용 가능 (UTF-8 인코딩)
+- 파일 내용: 한글 사용 가능
+- API 응답: 한글 사용 가능 (JSON UTF-8)
+- **이모지 사용 금지**: 모든 출력에서 이모지 사용하지 않음

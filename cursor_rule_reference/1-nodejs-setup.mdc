@@ -1,0 +1,186 @@
+---
+alwaysApply: true
+---
+
+# Frontend (Node.js) 프로젝트 설정 및 관리
+
+이 프로젝트는 **Backend(Python/FastAPI) + Frontend(React/Next.js/TypeScript)** 분리 구조입니다. Frontend만 Node.js 기반이며, 모든 UI 작업은 `frontend` 디렉토리에서 의존성 설치 후 실행합니다.
+
+## 1. 프로젝트 구조
+
+```
+refinancing_sim/              # 또는 refi-simulator
+├── .cursorrules              # 팀 디자인 규칙 및 코딩 컨벤션
+├── .cursor/                  # Cursor IDE 규칙 (.mdc)
+├── backend/                  # Python FastAPI API 및 시뮬레이션 엔진
+│   ├── main.py               # FastAPI 진입점 및 라우터
+│   ├── requirements.txt
+│   ├── data/
+│   │   └── debt_20251231.csv
+│   └── services/
+│       ├── data_loader.py    # CSV 파싱, WABC 계산
+│       ├── simulator.py      # FX Stress, Rollover 수식
+│       └── macro_api.py      # 외부 거시 데이터 (BOK, yfinance)
+│
+├── frontend/                 # React/Next.js + TypeScript
+│   ├── node_modules/
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── next.config.js        # 또는 tailwind.config.js
+│   ├── components/           # UI 컨트롤, 차트, 알림 배지
+│   ├── hooks/                # useSimulation 등 API 훅
+│   ├── types/                # api.ts 등 API JSON 인터페이스
+│   └── pages/                # 대시보드 뷰
+│
+├── debt_20251231.csv         # (루트에 있을 수 있음) 원본 데이터
+└── venv/                     # Python 가상환경 (루트 또는 backend)
+```
+
+## 2. 프로젝트 시작 시 자동화 (최우선 실행)
+
+### 초기 설정 체크리스트
+```powershell
+# 1. Backend: Python 가상환경 및 의존성
+if (Test-Path "venv") {
+    .\venv\Scripts\Activate.ps1
+} else {
+    python -m venv venv; .\venv\Scripts\Activate.ps1
+}
+if (Test-Path "backend/requirements.txt") {
+    pip install -r backend/requirements.txt --quiet
+}
+
+# 2. Frontend: Node 의존성
+cd frontend
+if (-not (Test-Path "node_modules")) {
+    npm install
+} else {
+    Write-Host "[OK] Frontend dependencies present" -ForegroundColor Green
+}
+cd ..
+Write-Host "[OK] Project setup complete" -ForegroundColor Green
+```
+
+## 3. 개발 서버 실행 패턴
+
+### Backend 서버 (Python FastAPI)
+```powershell
+.\venv\Scripts\Activate.ps1
+cd backend
+python -m uvicorn main:app --reload --port 8000
+
+# 한 줄
+.\venv\Scripts\Activate.ps1; cd backend; python -m uvicorn main:app --reload --port 8000
+```
+
+### Frontend 서버 (Next.js 또는 Vite)
+```powershell
+cd frontend
+npm install
+npm run dev
+
+# 한 줄
+cd frontend; npm install; npm run dev
+```
+
+### Backend + Frontend 동시 실행
+```powershell
+# 방법 1: 루트에 package.json이 있는 경우
+npm run dev
+
+# 방법 2: 별도 터미널
+# Terminal 1: Backend
+.\venv\Scripts\Activate.ps1; cd backend; python -m uvicorn main:app --reload --port 8000
+
+# Terminal 2: Frontend
+cd frontend; npm run dev
+```
+
+## 4. 루트 package.json 스크립트 (선택)
+
+Frontend만 Node이므로 루트에 workspaces가 없을 수 있음. 루트에서 동시 실행하려면:
+
+```json
+{
+  "name": "refinancing-simulator",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && ..\\venv\\Scripts\\activate && python -m uvicorn main:app --reload --port 8000",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "install:all": "pip install -r backend/requirements.txt && cd frontend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+```
+
+## 5. Frontend 필수 의존성
+
+```json
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "next": "latest",
+    "@tanstack/react-query": "^5.0.0",
+    "recharts": "^2.8.0",
+    "date-fns": "^2.30.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.56",
+    "@types/react-dom": "^18.2.19",
+    "typescript": "^5.3.3",
+    "tailwindcss": "^3.4.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.35"
+  }
+}
+```
+
+## 6. 환경 변수
+
+### Backend (.env 또는 환경)
+```bash
+# optional
+DATA_PATH=./data/debt_20251231.csv
+PORT=8000
+```
+
+### Frontend (.env.local)
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+# 또는 Vite: VITE_API_URL=http://localhost:8000
+```
+
+## 7. 포트
+
+- Backend (FastAPI): `8000` (기본) 또는 `3001`
+- Frontend (Next.js): `3000` (Next 기본) 또는 Vite `5173`
+
+## 8. 금지 사항
+
+- Backend를 Node/Express로 구현하지 말 것 (Python FastAPI 사용)
+- Prisma/DB 마이그레이션 없음 (데이터는 CSV + 인메모리)
+- 루트에서 `npm run dev` 시 Backend는 반드시 가상환경 활성화 후 uvicorn 실행
+
+## 9. 명령 실행 전 체크리스트
+
+Backend 시작 전:
+1. `backend/main.py` 존재
+2. `venv` 활성화
+3. `pip install -r backend/requirements.txt` 완료
+4. `backend/data/debt_20251231.csv` 존재 (또는 DATA_PATH 설정)
+
+Frontend 시작 전:
+1. `frontend/package.json` 존재
+2. `frontend/node_modules` 존재 (없으면 `npm install`)
+3. Backend 서버 실행 중 (API 호출용)
+
+## 중요: 프로젝트 시작 시
+
+1. Python 가상환경 활성화 후 Backend 의존성 설치
+2. Frontend는 `cd frontend; npm install; npm run dev`
+3. API 베이스 URL을 환경 변수로 Backend 주소 지정

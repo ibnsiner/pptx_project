@@ -1,0 +1,43 @@
+---
+description: FastAPI 파서, Supabase, Prisma, AI/RAG 연동
+---
+
+# 연동: parser-api, Supabase, RAG
+
+## 1. 서비스 분리
+
+| 구분 | 역할 |
+|------|------|
+| Next.js (Vercel) | UI, SSG, 관리자 플로우, Prisma로 DB |
+| parser-api (Render/Railway 등) | PPTX 파싱, (선택) 업로드 직후 LLM 메타 생성 |
+| Supabase | PostgreSQL, Storage, pgvector |
+
+## 2. CORS
+
+- FastAPI에서 프론트 오리진(로컬: `http://localhost:3000` 등) 허용
+
+## 3. 초기 파싱 단계
+
+- 업로드 직후: parser-api가 JSON + 메타(title, description, tags) **응답**
+- 이미지는 Storage 업로드 후 URL을 JSON에 포함
+- 이 시점에서 **Prisma INSERT는 하지 않음** (지시서: 프리뷰 후 최종 등록 시 저장)
+
+## 4. 최종 등록(Publish)
+
+- 검수 완료 후: 슬라이드 JSON + 확정 메타 + **슬라이드당 1청크** 텍스트를 **`text-embedding-3-large`**(3072차원)으로 임베딩해 `LectureChunk`에 저장
+- 벡터: `pgvector` `vector(3072)` — 마이그레이션/SQL은 Supabase 대시보드 또는 raw query와 Prisma 스키마 정합
+
+## 5. RAG 두 가지 모드
+
+1. **Global**: 포털 메인 챗봇. `lecture_id` 필터 없이 검색. 답변에 **강의명·슬라이드(페이지) 출처** 및 이동 가능한 링크.
+2. **Lecture**: 강의 뷰어 내 챗봇. 현재 `lecture_id`로 메타데이터 필터하여 **해당 강의만** 검색.
+
+## 6. AI 원칙
+
+- 답변은 **검색된 슬라이드/청크 근거**에 기반. 환각 최소화를 위해 출처 표시를 UI 계약에 포함
+- LLM: OpenAI 또는 Anthropic, LangChain 등은 팀 선택 (키는 서버 환경변수)
+
+## 7. 타입 공유
+
+- 파서 JSON 스키마와 맞춰 `frontend`에 TypeScript 타입 정의
+- API URL은 환경 변수로만 하드코딩하지 않음

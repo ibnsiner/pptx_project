@@ -1,0 +1,1171 @@
+---
+globs: *.tsx,*.ts,*.css
+description: Hybrid Refinancing Simulator 디자인 시스템 및 UI 컴포넌트 가이드
+---
+
+# Hybrid Refinancing Simulator 디자인 시스템
+
+본 프로젝트는 **일관된 디자인 시스템**을 사용하여 대시보드, 만기벽 차트, 시뮬레이션 패널의 UI/UX를 통일합니다.
+
+## 1. 색상 시스템 (GitHub 스타일)
+
+### Primary Colors
+```javascript
+primary: {
+  DEFAULT: '#0969DA',      // 메인 파란색 (버튼, 링크, 강조)
+  hover: '#0550AE',        // 호버 상태
+  light: '#DDF4FF',        // 배경, 포커스 링
+}
+```
+
+### Neutral Colors (Gray Scale)
+```javascript
+gray: {
+  50: '#F6F8FA',    // 테이블 헤더, 카드 배경
+  100: '#EAEEF2',   // 구분선, 비활성 배경
+  200: '#D0D7DE',   // Border
+  300: '#AFB8C1',   // Border (hover)
+  400: '#8C959F',   // 보조 텍스트
+  500: '#656D76',   // 본문 텍스트
+  600: '#57606A',   // 강조 텍스트
+  700: '#424A53',   // 제목 텍스트
+  800: '#32383F',   // 진한 제목
+  900: '#1F2328',   // 최고 강조
+}
+```
+
+### Status Colors
+```javascript
+success: {
+  DEFAULT: '#1A7F37',  // 성공, 활성, 우수
+  bg: '#DDF4E4',       // 배경
+}
+warning: {
+  DEFAULT: '#9A6700',  // 주의, 경고
+  bg: '#FFF8C5',       // 배경
+}
+error: {
+  DEFAULT: '#CF222E',  // 에러, 위험, 미흡
+  bg: '#FFEBE9',       // 배경
+}
+```
+
+### 지표별 색상 가이드 (WABC, FX Loss 등)
+```typescript
+// 점수 범위별 색상
+function getScoreColor(score: number): string {
+  if (score >= 4.5) return 'text-green-600'      // 우수
+  if (score >= 4.0) return 'text-blue-600'       // 양호
+  if (score >= 3.5) return 'text-yellow-600'     // 보통
+  if (score >= 3.0) return 'text-orange-600'     // 주의
+  return 'text-red-600'                          // 미흡
+}
+
+// Badge variant
+function getScoreBadgeVariant(score: number): 'success' | 'info' | 'warning' | 'error' {
+  if (score >= 4.5) return 'success'
+  if (score >= 4.0) return 'info'
+  if (score >= 3.5) return 'warning'
+  return 'error'
+}
+```
+
+## 2. 타이포그래피
+
+### 폰트 패밀리
+```css
+font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+```
+
+### 텍스트 크기 및 스타일
+```javascript
+fontSize: {
+  'page-title': ['24px', { lineHeight: '1.25', fontWeight: '600' }],     // 페이지 제목
+  'section-title': ['18px', { lineHeight: '1.4', fontWeight: '600' }],   // 섹션 제목
+  'card-title': ['16px', { lineHeight: '1.5', fontWeight: '600' }],      // 카드 제목
+  'body': ['14px', { lineHeight: '1.5', fontWeight: '400' }],            // 본문
+  'caption': ['12px', { lineHeight: '1.5', fontWeight: '400' }],         // 캡션
+  'label': ['12px', { lineHeight: '1.5', fontWeight: '500' }],           // 라벨
+}
+```
+
+### 사용 예시
+```tsx
+// 페이지 제목
+<h1 className="text-page-title text-gray-900">Refinancing Dashboard</h1>
+
+// 섹션 제목
+<h2 className="text-section-title text-gray-900 mb-4">만기벽 / 시뮬레이션 결과</h2>
+
+// 카드 제목
+<h3 className="text-card-title text-gray-700">종합 평가</h3>
+
+// 본문
+<p className="text-body text-gray-600">설명 텍스트</p>
+
+// 라벨
+<label className="text-label text-gray-500">입력 항목</label>
+```
+
+## 3. 스페이싱 시스템
+
+### 간격 표준
+```css
+gap-1  /* 4px */   - 아주 작은 간격 (버튼 그룹)
+gap-2  /* 8px */   - 작은 간격 (인라인 요소)
+gap-3  /* 12px */  - 보통 간격 (폼 필드)
+gap-4  /* 16px */  - 기본 간격 (카드 그리드)
+gap-6  /* 24px */  - 큰 간격 (섹션 사이)
+gap-8  /* 32px */  - 매우 큰 간격
+
+space-y-4  /* 세로 간격 16px */
+space-y-6  /* 세로 간격 24px */
+```
+
+### 패딩 표준
+```css
+p-3  /* 12px */ - Card sm
+p-4  /* 16px */ - Card md (기본)
+p-6  /* 24px */ - Card lg
+p-8  /* 32px */ - 모달, 빈 상태
+
+px-3 py-2  /* 버튼 sm */
+px-4 py-2  /* 버튼 md */
+px-6 py-3  /* 버튼 lg */
+```
+
+## 4. UI 컴포넌트
+
+### A. Card 컴포넌트
+```tsx
+import { Card, CardHeader, CardTitle } from '@/components/ui'
+
+// 기본 카드
+<Card padding="md">
+  <CardTitle>제목</CardTitle>
+  <p>내용</p>
+</Card>
+
+// 헤더가 있는 카드
+<Card>
+  <CardHeader>
+    <CardTitle>제목</CardTitle>
+    <div className="flex gap-2">
+      <Button size="sm">액션</Button>
+    </div>
+  </CardHeader>
+  <div>카드 본문</div>
+</Card>
+
+// 호버 효과 (클릭 가능한 카드)
+<Card className="hover:border-primary transition-colors cursor-pointer">
+  {/* 내용 */}
+</Card>
+
+// 스타일
+className: "bg-white border border-gray-200 rounded-md"
+```
+
+### B. Button 컴포넌트
+```tsx
+import { Button } from '@/components/ui'
+
+// Variants
+<Button variant="primary">주요 액션</Button>
+<Button variant="secondary">보조 액션</Button>
+<Button variant="danger">삭제</Button>
+<Button variant="ghost">텍스트 버튼</Button>
+
+// Sizes
+<Button size="sm">작은 버튼</Button>
+<Button size="md">기본 버튼</Button>
+<Button size="lg">큰 버튼</Button>
+
+// Loading 상태
+<Button loading={isLoading}>저장 중...</Button>
+
+// Disabled
+<Button disabled>비활성</Button>
+
+// 스타일
+primary:   bg-primary text-white hover:bg-primary-hover
+secondary: bg-white border border-gray-200 hover:bg-gray-50
+danger:    bg-error text-white hover:bg-red-700
+ghost:     text-gray-600 hover:text-gray-900 hover:bg-gray-100
+```
+
+### C. Table 컴포넌트
+```tsx
+import { 
+  Table, TableHeader, TableBody, TableRow, 
+  TableHead, TableCell 
+} from '@/components/ui'
+
+<Table>
+  <TableHeader>
+    <TableRow>
+      <TableHead>이름</TableHead>
+      <TableHead>부서</TableHead>
+      <TableHead className="text-right">점수</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {leaders.map(leader => (
+      <TableRow key={leader.id}>
+        <TableCell className="font-medium">{leader.name}</TableCell>
+        <TableCell>{leader.department}</TableCell>
+        <TableCell className="text-right">
+          <Badge variant="success">{leader.score}</Badge>
+        </TableCell>
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>
+
+// 스타일
+TableHeader:  bg-gray-50
+TableHead:    text-xs font-semibold text-gray-700 uppercase px-4 py-3
+TableBody:    divide-y divide-gray-100
+TableRow:     hover:bg-gray-50 transition-colors
+TableCell:    text-gray-700 px-4 py-3
+```
+
+### D. Badge 컴포넌트
+```tsx
+import { Badge } from '@/components/ui'
+
+<Badge variant="default">기본</Badge>
+<Badge variant="success">우수</Badge>
+<Badge variant="warning">주의</Badge>
+<Badge variant="error">미흡</Badge>
+<Badge variant="gray">비활성</Badge>
+<Badge variant="info">정보</Badge>
+
+// 점수 뱃지 예시
+<Badge variant={score >= 4.5  'success' : 'warning'}>
+  {score.toFixed(2)}
+</Badge>
+
+// 스타일
+className: "inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full"
+
+default:  bg-primary-light text-primary
+success:  bg-success-bg text-success
+warning:  bg-warning-bg text-warning
+error:    bg-error-bg text-error
+gray:     bg-gray-100 text-gray-600
+info:     bg-blue-100 text-blue-700
+```
+
+### E. Input 컴포넌트
+```tsx
+import { Input } from '@/components/ui'
+
+<Input
+  label="이름"
+  placeholder="이름을 입력하세요"
+  value={name}
+  onChange={(e) => setName(e.target.value)}
+  required
+  error="이름은 필수입니다"
+/>
+
+// 스타일
+input: "w-full px-3 py-2 text-sm border border-gray-200 rounded-md 
+        focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary-light"
+label: "block text-label text-gray-500 mb-1"
+error: "text-xs text-error mt-1"
+```
+
+### F. Select 컴포넌트
+```tsx
+import { Select } from '@/components/ui'
+
+<Select
+  label="연도"
+  value={year}
+  onChange={(e) => setYear(e.target.value)}
+  options={[
+    { value: '2024', label: '2024년' },
+    { value: '2025', label: '2025년' },
+  ]}
+/>
+
+// 스타일
+select: "w-full px-3 py-2 text-sm border border-gray-200 rounded-md 
+         focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary-light"
+```
+
+### G. Modal 컴포넌트
+```tsx
+import { Modal } from '@/components/ui'
+
+<Modal
+  isOpen={isOpen}
+  onClose={() => setIsOpen(false)}
+  title="모달 제목"
+>
+  <div className="space-y-4">
+    <Input label="필드1" />
+    <Select label="필드2" />
+    
+    <div className="flex justify-end gap-2 pt-4">
+      <Button variant="secondary" onClick={onClose}>취소</Button>
+      <Button onClick={onSave}>저장</Button>
+    </div>
+  </div>
+</Modal>
+
+// 스타일
+overlay: "fixed inset-0 bg-black bg-opacity-50 z-40"
+modal:   "fixed inset-0 flex items-center justify-center z-50"
+content: "bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+```
+
+### H. PageHeader 컴포넌트
+```tsx
+import { PageHeader } from '@/components/ui'
+
+// 기본 사용
+<PageHeader
+  title="Refinancing Dashboard"
+  description="총 부채, WABC, 만기벽, FX/롤오버 시뮬레이션"
+/>
+
+// 브레드크럼
+<PageHeader
+  title="시뮬레이션 상세"
+  breadcrumb={[
+    { label: 'Dashboard', href: '/' },
+    { label: 'FX Stress', href: '/simulate/fx' },
+    { label: '결과' }
+  ]}
+/>
+
+// 액션 버튼
+<PageHeader
+  title="만기벽 / 시뮬레이션 테이블"
+  actions={
+    <>
+      <Button variant="secondary">Excel 다운로드</Button>
+      <Button>PDF 생성</Button>
+    </>
+  }
+/>
+```
+
+## 5. 레이아웃 패턴
+
+### A. 기본 페이지 레이아웃
+```tsx
+export default function DashboardPage() {
+  return (
+    <div className="space-y-6">
+      {/* 페이지 헤더 */}
+      <div>
+        <h1 className="text-page-title text-gray-900">제목</h1>
+        <p className="text-gray-500 mt-1">설명</p>
+      </div>
+
+      {/* 통계 카드 그리드 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {stats.map(stat => (
+          <Card key={stat.label} className="text-center">
+            <p className="text-3xl font-bold text-primary">{stat.value}</p>
+            <p className="text-sm text-gray-500 mt-1">{stat.label}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* 메인 컨텐츠 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>섹션 제목</CardTitle>
+        </CardHeader>
+        {/* 내용 */}
+      </Card>
+    </div>
+  )
+}
+```
+
+### B. 탭 레이아웃
+```tsx
+// 헤더 + 탭 통합 (border-bottom 공유)
+<div className="flex items-center justify-between border-b border-gray-200 pb-0">
+  <div className="flex items-center gap-3">
+    <h1 className="text-lg font-semibold text-gray-900">제목</h1>
+    <span className="text-sm text-gray-500">설명</span>
+  </div>
+  
+  <div className="flex gap-1">
+    {tabs.map(tab => (
+      <button
+        key={tab.id}
+        onClick={() => setActiveTab(tab.id)}
+        className={`
+          px-3 py-2 text-sm font-medium 
+          border-b-2 -mb-px transition-colors
+          ${activeTab === tab.id
+             'border-blue-500 text-blue-600'
+            : 'border-transparent text-gray-500 hover:text-gray-700'
+          }
+        `}
+      >
+        {tab.label}
+      </button>
+    ))}
+  </div>
+</div>
+
+{/* 탭 컨텐츠 */}
+{activeTab === 'overview' && <OverviewTab />}
+{activeTab === 'analysis' && <AnalysisTab />}
+```
+
+### C. 마스터-디테일 레이아웃 (2칼럼)
+```tsx
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  {/* 왼쪽: 목록 (1/3) */}
+  <Card className="lg:col-span-1">
+    <div className="p-4 border-b border-gray-100">
+      <span className="text-sm font-medium text-gray-700">목록</span>
+    </div>
+    <div className="divide-y divide-gray-100">
+      {leaders.map(leader => (
+        <div
+          key={leader.id}
+          onClick={() => setSelected(leader.id)}
+          className={`
+            p-3 cursor-pointer transition-colors
+            ${selected === leader.id 
+               'bg-blue-50 border-l-2 border-blue-500' 
+              : 'hover:bg-gray-50'
+            }
+          `}
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-sm">{leader.name}</span>
+            <Badge variant="gray">{leader.department}</Badge>
+          </div>
+        </div>
+      ))}
+    </div>
+  </Card>
+
+  {/* 오른쪽: 상세 (2/3) */}
+  <Card className="lg:col-span-2">
+    <CardHeader>
+      <CardTitle>{selectedLeader.name} 상세</CardTitle>
+    </CardHeader>
+    {/* 상세 내용 */}
+  </Card>
+</div>
+```
+
+### D. 통계 카드 그리드
+```tsx
+// 2열 또는 4열 그리드
+<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+  {stats.map(stat => (
+    <Card key={stat.label} className="text-center p-4">
+      <p className={`text-3xl font-bold ${stat.color}`}>
+        {stat.value}
+      </p>
+      <p className="text-sm text-gray-500 mt-1">{stat.label}</p>
+    </Card>
+  ))}
+</div>
+
+// Refinancing KPI 카드 예시
+<Card className="p-6">
+  <div className="flex items-center justify-between mb-2">
+    <span className="text-sm text-gray-600">WABC</span>
+    <Badge variant="success">현재</Badge>
+  </div>
+  <p className="text-4xl font-bold text-primary">3.92%</p>
+  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+    <span>총 부채 6.54조</span>
+    <span>•</span>
+    <span>기준일 2025-12-31</span>
+  </div>
+</Card>
+```
+
+## 6. 폼 패턴
+
+### A. 검색/필터 폼
+```tsx
+<Card>
+  <div className="p-4">
+    <form onSubmit={handleSearch} className="flex gap-4 items-end">
+      {/* 검색 입력 */}
+      <div className="flex-1 min-w-[200px]">
+        <Input
+          label="검색"
+          placeholder="이름, 사번으로 검색..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+      
+      {/* 필터 */}
+      <div className="w-32 flex-shrink-0">
+        <Select
+          label="부서"
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          options={departmentOptions}
+        />
+      </div>
+      
+      <div className="w-32 flex-shrink-0">
+        <Select
+          label="점수 범위"
+          value={scoreRange}
+          onChange={(e) => setScoreRange(e.target.value)}
+          options={[
+            { value: '', label: '전체' },
+            { value: '4.5+', label: '4.5 이상' },
+            { value: '4.0-4.5', label: '4.0-4.5' },
+            { value: '3.5-4.0', label: '3.5-4.0' },
+            { value: '3.5-', label: '3.5 미만' },
+          ]}
+        />
+      </div>
+      
+      <Button type="submit">검색</Button>
+    </form>
+  </div>
+</Card>
+```
+
+### B. 모달 폼
+```tsx
+<Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="What-If 시뮬레이션">
+  <div className="space-y-4">
+    {/* 폼 필드 */}
+    <Input
+      label="설문명"
+      placeholder="예: 시뮬레이션 이름"
+      value={formData.name}
+      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+      required
+    />
+    
+    <div className="grid grid-cols-2 gap-4">
+      <Select label="연도" value={formData.year} {...} />
+      <Select label="분기" value={formData.quarter} {...} />
+    </div>
+    
+    {/* 액션 버튼 */}
+    <div className="flex justify-end gap-2 pt-4">
+      <Button variant="secondary" onClick={onClose}>취소</Button>
+      <Button onClick={onSubmit} loading={isSubmitting}>저장</Button>
+    </div>
+  </div>
+</Modal>
+```
+
+## 7. 상태 표시 패턴
+
+### A. 로딩 상태
+```tsx
+{isLoading  (
+  <div className="text-center py-8">
+    <div className="animate-spin rounded-full h-6 w-6 
+                    border-b-2 border-primary mx-auto" />
+    <p className="text-sm text-gray-500 mt-2">로딩 중...</p>
+  </div>
+) : (
+  /* 데이터 */
+)}
+
+// 테이블 로딩
+<TableBody>
+  {isLoading  (
+    <TableRow>
+      <TableCell colSpan={5} className="text-center py-8">
+        <div className="animate-spin rounded-full h-6 w-6 
+                        border-b-2 border-primary mx-auto" />
+      </TableCell>
+    </TableRow>
+  ) : (
+    /* 데이터 행 */
+  )}
+</TableBody>
+```
+
+### B. 빈 상태
+```tsx
+{items.length === 0  (
+  <div className="p-8 text-center text-gray-500 text-sm">
+    <p>데이터가 없습니다</p>
+    <Button variant="secondary" size="sm" className="mt-4">
+      데이터 추가
+    </Button>
+  </div>
+) : (
+  /* 데이터 목록 */
+)}
+
+// 테이블 빈 상태
+<TableBody>
+  {leaders.length === 0  (
+    <TableRow>
+      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+        검색 결과가 없습니다
+      </TableCell>
+    </TableRow>
+  ) : (
+    /* 데이터 행 */
+  )}
+</TableBody>
+```
+
+### C. 에러 상태
+```tsx
+{error && (
+  <Card className="border-error bg-error-bg p-4">
+    <div className="flex items-start gap-3">
+      <svg className="w-5 h-5 text-error flex-shrink-0" fill="currentColor">
+        {/* Error Icon */}
+      </svg>
+      <div>
+        <p className="text-sm font-medium text-error">오류 발생</p>
+        <p className="text-xs text-gray-600 mt-1">{error.message}</p>
+      </div>
+    </div>
+  </Card>
+)}
+```
+
+## 8. 네비게이션 패턴
+
+### A. 상단 네비게이션 (Layout)
+```tsx
+<nav className="hidden md:flex items-center gap-1">
+  {navigation.map((item) => (
+    <Link
+      key={item.name}
+      to={item.href}
+      className={`
+        px-3 py-2 text-sm font-medium rounded-md transition-colors
+        ${isActive(item.href)
+           'text-gray-900 bg-gray-100'
+          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+        }
+      `}
+    >
+      {item.name}
+    </Link>
+  ))}
+</nav>
+```
+
+### B. 브레드크럼
+```tsx
+<nav className="flex items-center text-sm text-gray-500 mb-2">
+  {breadcrumb.map((item, index) => (
+    <span key={index} className="flex items-center">
+      {index > 0 && (
+        <svg className="w-4 h-4 mx-1.5 text-gray-400" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+        </svg>
+      )}
+      {item.href  (
+        <Link to={item.href} className="hover:text-primary transition-colors">
+          {item.label}
+        </Link>
+      ) : (
+        <span className="text-gray-900 font-medium">{item.label}</span>
+      )}
+    </span>
+  ))}
+</nav>
+```
+
+## 9. 페이지네이션 패턴
+
+```tsx
+<div className="flex items-center justify-between p-4 border-t border-gray-100">
+  {/* 좌측: 정보 */}
+  <div className="text-sm text-gray-600">
+    총 {total}건 중 {start}-{end}건
+  </div>
+  
+  {/* 우측: 페이지 버튼 */}
+  <div className="flex gap-1">
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={page === 1}
+      onClick={() => setPage(p => p - 1)}
+    >
+      이전
+    </Button>
+    
+    {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+      <Button
+        key={pageNum}
+        variant={page === pageNum  'primary' : 'ghost'}
+        size="sm"
+        onClick={() => setPage(pageNum)}
+      >
+        {pageNum}
+      </Button>
+    ))}
+    
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={page === totalPages}
+      onClick={() => setPage(p => p + 1)}
+    >
+      다음
+    </Button>
+  </div>
+</div>
+```
+
+## 10. 차트 스타일 (Recharts)
+
+### 공통 차트 설정
+```tsx
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer 
+} from 'recharts'
+
+<Card>
+  <CardHeader>
+    <CardTitle>부서별 평균 점수</CardTitle>
+  </CardHeader>
+  <div className="h-80 p-4">
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#EAEEF2" />
+        <XAxis 
+          dataKey="name" 
+          tick={{ fill: '#656D76', fontSize: 12 }}
+          tickLine={{ stroke: '#D0D7DE' }}
+        />
+        <YAxis 
+          tick={{ fill: '#656D76', fontSize: 12 }}
+          tickLine={{ stroke: '#D0D7DE' }}
+        />
+        <Tooltip 
+          contentStyle={{
+            backgroundColor: 'white',
+            border: '1px solid #D0D7DE',
+            borderRadius: '6px',
+            fontSize: '12px'
+          }}
+        />
+        <Legend 
+          wrapperStyle={{ fontSize: '12px', color: '#656D76' }}
+        />
+        <Bar dataKey="score" fill="#0969DA" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  </div>
+</Card>
+
+// 색상 팔레트
+const CHART_COLORS = {
+  primary: '#0969DA',
+  success: '#1A7F37',
+  warning: '#9A6700',
+  error: '#CF222E',
+  gray: '#8C959F',
+}
+```
+
+### 레이더 차트 (문항별 점수)
+```tsx
+<RadarChart data={questionScores}>
+  <PolarGrid stroke="#EAEEF2" />
+  <PolarAngleAxis 
+    dataKey="question" 
+    tick={{ fill: '#656D76', fontSize: 11 }}
+  />
+  <PolarRadiusAxis 
+    angle={90} 
+    domain={[0, 5]}
+    tick={{ fill: '#656D76', fontSize: 10 }}
+  />
+  <Radar 
+    name="점수" 
+    dataKey="score" 
+    stroke="#0969DA" 
+    fill="#0969DA" 
+    fillOpacity={0.3} 
+  />
+  <Tooltip />
+</RadarChart>
+```
+
+## 11. 데이터 테이블 고급 패턴
+
+### 정렬 가능한 헤더
+```tsx
+<TableHead 
+  className="cursor-pointer hover:bg-gray-100"
+  onClick={() => handleSort('score')}
+>
+  <div className="flex items-center gap-1">
+    점수
+    {sortBy === 'score' && (
+      <svg className="w-4 h-4">
+        {sortOrder === 'asc'  <path d="M7 10l5 5 5-5z"/> : <path d="M7 14l5-5 5 5z"/>}
+      </svg>
+    )}
+  </div>
+</TableHead>
+```
+
+### 선택 가능한 행
+```tsx
+<TableRow 
+  className={`
+    cursor-pointer
+    ${selected.includes(row.id)  'bg-blue-50' : ''}
+  `}
+  onClick={() => toggleSelect(row.id)}
+>
+  <TableCell>
+    <input 
+      type="checkbox" 
+      checked={selected.includes(row.id)}
+      onChange={() => {}}
+      className="rounded border-gray-300 text-primary"
+    />
+  </TableCell>
+  {/* 나머지 셀 */}
+</TableRow>
+```
+
+## 12. 액션 버튼 그룹
+
+### 페이지 상단 액션
+```tsx
+<div className="flex justify-end gap-2">
+  <Button variant="secondary">
+    <svg className="w-4 h-4 mr-2">...</svg>
+    Excel 다운로드
+  </Button>
+  <Button variant="secondary">PDF 생성</Button>
+  <Button>+ 새로 만들기</Button>
+</div>
+```
+
+### 테이블 행 액션
+```tsx
+<TableCell>
+  <div className="flex gap-2">
+    <button className="text-primary hover:text-primary-hover text-sm">
+      수정
+    </button>
+    <button className="text-gray-500 hover:text-red-600 text-sm">
+      삭제
+    </button>
+  </div>
+</TableCell>
+```
+
+## 13. 반응형 그리드
+
+```tsx
+// 모바일 1열, 태블릿 2열, 데스크탑 3열
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  {items.map(item => (
+    <Card key={item.id}>{/* 내용 */}</Card>
+  ))}
+</div>
+
+// 통계는 2/4열
+<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+  {stats.map(stat => (
+    <Card key={stat.label}>{/* 통계 */}</Card>
+  ))}
+</div>
+
+// 상세 페이지는 마스터 1:2 비율
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div className="lg:col-span-1">{/* 목록 */}</div>
+  <div className="lg:col-span-2">{/* 상세 */}</div>
+</div>
+```
+
+## 14. 애니메이션 및 트랜지션
+
+```css
+/* 기본 트랜지션 */
+transition-colors    /* 색상 변화 (버튼, 링크) */
+transition-all       /* 모든 속성 */
+
+/* 호버 효과 */
+hover:bg-gray-50
+hover:text-primary
+hover:border-primary
+
+/* 포커스 링 */
+focus:outline-none 
+focus:ring-2 
+focus:ring-primary-light
+focus:border-primary
+```
+
+## 15. 유틸리티 클래스 조합
+
+### 자주 사용하는 조합
+```css
+/* 카드 내 구분선 */
+divide-y divide-gray-100
+
+/* 세로 간격 */
+space-y-4
+space-y-6
+
+/* Flexbox 정렬 */
+flex items-center justify-between
+flex items-start gap-3
+
+/* 텍스트 스타일 */
+text-sm font-medium text-gray-700
+text-xs text-gray-500
+font-mono text-sm  /* 사번, 코드 */
+
+/* 반응형 숨김 */
+hidden md:flex
+md:hidden
+```
+
+## 16. 컴포넌트 파일 구조
+
+```tsx
+// src/components/dashboard/StatCard.tsx
+import { Card, Badge } from '@/components/ui'
+
+interface LeaderCardProps {
+  leader: Leader
+  onClick: () => void
+}
+
+export default function LeaderCard({ leader, onClick }: LeaderCardProps) {
+  return (
+    <Card 
+      className="hover:border-primary transition-colors cursor-pointer"
+      onClick={onClick}
+    >
+      {/* 헤더 */}
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className="font-semibold text-gray-900">{leader.name}</h3>
+          <p className="text-sm text-gray-500 mt-1">{leader.department}</p>
+        </div>
+        <Badge variant={getScoreBadgeVariant(leader.overallScore)}>
+          {leader.overallScore.toFixed(2)}
+        </Badge>
+      </div>
+      
+      {/* 점수 상세 */}
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <span className="text-gray-500">PM</span>
+          <span className="ml-2 font-medium text-gray-900">
+            {leader.pmScore.toFixed(2)}
+          </span>
+        </div>
+        <div>
+          <span className="text-gray-500">IDP</span>
+          <span className="ml-2 font-medium text-gray-900">
+            {leader.idpScore.toFixed(2)}
+          </span>
+        </div>
+      </div>
+      
+      {/* 응답 정보 */}
+      <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+        {leader.validResponses}명 응답 
+        {leader.totalResponses > leader.validResponses && 
+          ` (미평가 ${leader.totalResponses - leader.validResponses}명)`
+        }
+      </div>
+    </Card>
+  )
+}
+```
+
+## 17. 색상 사용 가이드라인
+
+### 점수 평가 색상
+```tsx
+// 5점 척도 점수 표시
+function getScoreClassName(score: number) {
+  if (score >= 4.5) return 'text-green-600'      // 우수 (4.5-5.0)
+  if (score >= 4.0) return 'text-blue-600'       // 양호 (4.0-4.5)
+  if (score >= 3.5) return 'text-yellow-600'     // 보통 (3.5-4.0)
+  if (score >= 3.0) return 'text-orange-600'     // 주의 (3.0-3.5)
+  return 'text-red-600'                          // 미흡 (3.0 미만)
+}
+
+// 배경색이 필요한 경우
+function getScoreBgClassName(score: number) {
+  if (score >= 4.5) return 'bg-green-50'
+  if (score >= 4.0) return 'bg-blue-50'
+  if (score >= 3.5) return 'bg-yellow-50'
+  if (score >= 3.0) return 'bg-orange-50'
+  return 'bg-red-50'
+}
+```
+
+### 상태별 색상
+- **활성/재직/성공**: `success` (#1A7F37)
+- **주의/휴직/경고**: `warning` (#9A6700)
+- **비활성/퇴직/에러**: `error` (#CF222E)
+- **중립/기본**: `gray`
+
+## 18. 반복 패턴 컴포넌트
+
+### 통계 카드 컴포넌트
+```tsx
+interface StatCardProps {
+  label: string
+  value: string | number
+  color: string
+  subtext: string
+}
+
+export function StatCard({ label, value, color = 'text-gray-900', subtext }: StatCardProps) {
+  return (
+    <Card className="text-center p-4">
+      <p className={`text-3xl font-bold ${color}`}>{value}</p>
+      <p className="text-sm text-gray-500 mt-1">{label}</p>
+      {subtext && (
+        <p className="text-xs text-gray-400 mt-0.5">{subtext}</p>
+      )}
+    </Card>
+  )
+}
+
+// 사용
+<StatCard label="전체 평균" value="4.52" color="text-primary" />
+<StatCard label="총 부채" value="6.54조" subtext="WABC 3.92%" />
+```
+
+## 19. 필수 적용 사항
+
+### 모든 페이지 컴포넌트
+1. ✅ `space-y-6` 로 섹션 간격
+2. ✅ 페이지 제목은 `text-page-title text-gray-900`
+3. ✅ 설명은 `text-gray-500 mt-1`
+4. ✅ Card 컴포넌트로 섹션 구분
+5. ✅ 통계는 Grid 레이아웃
+
+### 모든 폼
+1. ✅ Card로 감싸기
+2. ✅ `space-y-4`로 필드 간격
+3. ✅ 버튼은 우측 정렬 `justify-end gap-2`
+4. ✅ 취소 버튼: `variant="secondary"`
+5. ✅ 제출 버튼: `variant="primary"`
+
+### 모든 테이블
+1. ✅ Table 컴포넌트 사용
+2. ✅ 헤더: `bg-gray-50`, `text-xs`, `uppercase`
+3. ✅ 행: `hover:bg-gray-50`
+4. ✅ 빈 상태 처리
+5. ✅ 로딩 상태 처리
+
+## 20. 재사용할 UI 컴포넌트 목록
+
+HR Data Hub에서 가져와 사용할 컴포넌트:
+
+```
+src/components/ui/
+├── Button.tsx           ✅ 필수
+├── Card.tsx             ✅ 필수
+├── Table.tsx            ✅ 필수
+├── Badge.tsx            ✅ 필수
+├── Input.tsx            ✅ 필수
+├── Select.tsx           ✅ 필수
+├── Modal.tsx            ✅ 필수
+├── PageHeader.tsx       ✅ 필수
+└── BackButton.tsx       선택
+
+src/components/layout/
+└── Layout.tsx           ✅ 필수 (수정하여 사용)
+```
+
+## 21. Tailwind Config 필수 설정
+
+```javascript
+// tailwind.config.js - HR Data Hub와 동일하게
+export default {
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: '#0969DA',
+          hover: '#0550AE',
+          light: '#DDF4FF',
+        },
+        gray: { /* ... */ },
+        success: { /* ... */ },
+        warning: { /* ... */ },
+        error: { /* ... */ },
+      },
+      fontSize: { /* ... */ },
+      borderRadius: { DEFAULT: '6px' },
+      boxShadow: { 'focus': '0 0 0 3px #DDF4FF' },
+    },
+  },
+}
+```
+
+## 22. index.css 필수 설정
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-700;
+  }
+}
+
+/* 커스텀 스크롤바 */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+```
+
+## 중요: 디자인 일관성 체크리스트
+
+새 컴포넌트 또는 페이지 작성 시 반드시 확인:
+
+1. ✅ HR Data Hub의 UI 컴포넌트를 재사용했는가
+2. ✅ Tailwind Config의 색상을 사용했는가
+3. ✅ 타이포그래피 클래스를 사용했는가
+4. ✅ 간격 시스템을 준수했는가 (space-y-4, gap-4 등)
+5. ✅ 로딩/빈 상태를 처리했는가
+6. ✅ 반응형 그리드를 적용했는가
+7. ✅ 트랜지션 효과를 추가했는가
+8. ✅ 접근성을 고려했는가 (aria-label 등)

@@ -1,0 +1,43 @@
+---
+alwaysApply: true
+---
+
+# PPTX Portal 프로젝트 지시사항 (요약)
+
+`Cursor_AI_작업지시서.md`와 동일한 방향으로 구현한다.
+
+## 비전
+
+1. PPT를 통이미지로만 바꾸지 않고, 텍스트·도형·이미지를 추출해 **HTML/CSS 반응형**으로 렌더한다.
+2. 추출 텍스트 기반 **RAG** AI 어시스턴트 (환각 최소화, 출처 링크).
+3. **SSG** 등으로 뷰어 부하·비용 최적화.
+4. 관리자는 **프리뷰 및 검수(Preview & Verify)** 후에만 최종 등록한다.
+
+## 기술 스택 (고정 의도)
+
+- Next.js App Router, TypeScript, Tailwind
+- 파서: Python FastAPI, `python-pptx`
+- DB/벡터/스토리지: Supabase (Postgres + pgvector + Storage)
+- ORM: Prisma
+- 인증: Supabase Auth, 역할 **`admin` | `viewer`** (`/admin`·최종 등록은 admin만)
+- RAG: `LectureChunk` + **`vector(3072)`**, 임베딩 **`text-embedding-3-large`**; 청크는 **슬라이드당 1개(1순위)** — 지시서 §5.3
+- AI: OpenAI 또는 Anthropic + LangChain; **파싱은 parser-api, LLM·임베딩·챗은 Next 서버 권장** (지시서 §4.1)
+
+## 개발 단계 (순서)
+
+Cursor는 아래 순서를 기본 로드맵으로 삼고, **단계 완료 시 사용자 확인**을 받는다. 오버엔지니어링 금지.
+
+1. Monorepo 구조: `frontend` + `parser-api`
+2. Supabase 연결, Auth·RLS, Prisma 마이그레이션 (`Lecture`, `Slide`, `LectureChunk`, pgvector)
+3. FastAPI 파싱 API: 퍼센트 좌표, 이미지 Storage, JSON 반환 (**업로드 직후 DB 저장 없음**)
+4. `/admin/upload`: 업로드 폼 + parser-api 연동
+5. `SlideViewer` + 프리뷰 대시보드 + 메타데이터 수정 폼
+6. 최종 등록: 임베딩 + DB + pgvector 영구 저장
+7. 포털 메인(SSG) + Global/Lecture 두 모드 채팅
+
+## 구현 시 금지·필수
+
+- **금지**: 슬라이드 전체를 단일 래스터 이미지로만 서비스하는 것을 기본으로 하지 않음.
+- **금지**: `airppt-parser` npm 패키지 설치.
+- **필수**: EMU 기준 슬라이드 대비 **퍼센트 좌표** JSON.
+- **필수**: 뷰어와 동일한 규칙으로 관리자 **프리뷰** 렌더.
