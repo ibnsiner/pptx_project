@@ -22,7 +22,7 @@ from app.slide_raster_ppt import render_slide_rasters_ppt
 
 app = FastAPI(title="PPTX Parser API")
 
-PARSER_API_BUILD = "2026-04-01-ppt-com-raster"
+PARSER_API_BUILD = "2026-04-01-text-style2"
 
 app.add_middleware(
     CORSMiddleware,
@@ -333,6 +333,190 @@ def _shape_text(shape: Any) -> str:
         return t2
 
     return ""
+
+
+def _rgb_to_hex(rgb: Any) -> str | None:
+    """pptx RGBColor → '#RRGGBB' 문자열. 실패 시 None."""
+    try:
+        if rgb is None:
+            return None
+        r = int(getattr(rgb, "r", 0))
+        g = int(getattr(rgb, "g", 0))
+        b = int(getattr(rgb, "b", 0))
+        return f"#{r:02x}{g:02x}{b:02x}"
+    except Exception:
+        return None
+
+
+def _xml_attr_first(elm: Any, *attr_names: str) -> str | None:
+    """ElementTree 노드에서 여러 속성명 중 첫 번째로 존재하는 값을 반환."""
+    if elm is None:
+        return None
+    for a in attr_names:
+        v = elm.get(a)
+        if v is not None:
+            return v
+    return None
+
+
+def _extract_text_style(shape: Any, slide_w: int) -> dict[str, Any]:
+    """
+    텍스트 스타일을 슬라이드 → 레이아웃 → 마스터 상속 체인을 따라 추출한다.
+
+    Placeholder 도형은 슬라이드 XML에 <a:rPr>가 없고 Layout/Master에 스타일이 정의되므로
+    세 단계를 순서대로 탐색해 빈 필드를 채운다.
+
+    반환 키: color, bold, italic, underline, fontSize, fontFamily, textAlign
+    """
+    style: dict[str, Any] = {}
+    try:
+        slide_w_pt = float(slide_w) / 12700.0
+        if slide_w_pt <= 0:
+            return style
+
+        NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+        def _tag(local: str) -> str:
+            return f"{{{NS_A}}}{local}"
+
+        def _parse_rpr(rpr: Any) -> dict[str, Any]:
+            """<a:rPr> 또는 <a:defRPr> XML에서 스타일 딕셔너리 생성."""
+            out: dict[str, Any] = {}
+            if rpr is None:
+                return out
+            b = rpr.get("b")
+            if b is not None:
+                out["bold"] = b not in ("0", "false")
+            i = rpr.get("i")
+            if i is not None:
+                out["italic"] = i not in ("0", "false")
+            u = rpr.get("u")
+            if u is not None and u not in ("none", "0", "false"):
+                out["underline"] = True
+            sz = rpr.get("sz")
+            if sz:
+                try:
+                    pt_val = int(sz) * 0.01
+                    cqw = min(max((pt_val / slide_w_pt) * 100.0, 0.4), 14.0)
+                    out["fontSize"] = f"{cqw:.4f}cqw"
+                except (ValueError, ZeroDivisionError):
+                    pass
+            for tag in (_tag("latin"), _tag("ea")):
+                node = rpr.find(tag)
+                if node is not None:
+                    tf = node.get("typeface", "")
+                    if tf and not tf.startswith("+"):
+                        out["fontFamily"] = tf
+                        break
+            solid = rpr.find(_tag("solidFill"))
+            if solid is not None:
+                srgb = solid.find(_tag("srgbClr"))
+                if srgb is not None:
+                    val = srgb.get("val", "")
+                    if len(val) == 6:
+                        out["color"] = f"#{val.lower()}"
+            return out
+
+        def _merge(base: dict, new: dict) -> None:
+            for k, v in new.items():
+                if k not in base:
+                    base[k] = v
+
+        def _scan_txbody(txBody: Any) -> None:
+            """txBody 전체를 순회해 style에 채워 넣는다."""
+            if txBody is None:
+                return
+            for p_elm in txBody.findall(_tag("p")):
+                # textAlign
+                if "textAlign" not in style:
+                    pPr = p_elm.find(_tag("pPr"))
+                    if pPr is not None:
+                        algn = pPr.get("algn")
+                        am = {"l": "left", "ctr": "center", "r": "right", "just": "justify"}
+                        if algn in am:
+                            style["textAlign"] = am[algn]
+
+                # <a:r><a:rPr>
+                for r_elm in p_elm.findall(_tag("r")):
+                    rpr = r_elm.find(_tag("rPr"))
+                    if rpr is not None:
+                        _merge(style, _parse_rpr(rpr))
+
+                # <a:br><a:rPr>
+                for br_elm in p_elm.findall(_tag("br")):
+                    rpr = br_elm.find(_tag("rPr"))
+                    if rpr is not None:
+                        _merge(style, _parse_rpr(rpr))
+
+                # <a:pPr><a:defRPr>
+                pPr = p_elm.find(_tag("pPr"))
+                if pPr is not None:
+                    defRPr = pPr.find(_tag("defRPr"))
+                    if defRPr is not None:
+                        _merge(style, _parse_rpr(defRPr))
+
+                if len(style) >= 6:
+                    return
+
+            # lstStyle / defPPr / defRPr 폴백
+            lst = txBody.find(_tag("lstStyle"))
+            if lst is not None:
+                for defPPr in (lst.find(_tag("defPPr")), lst.find(_tag("lvl1pPr"))):
+                    if defPPr is not None:
+                        defRPr = defPPr.find(_tag("defRPr"))
+                        if defRPr is not None:
+                            _merge(style, _parse_rpr(defRPr))
+                            # textAlign from defPPr
+                            if "textAlign" not in style:
+                                algn = defPPr.get("algn")
+                                am = {"l": "left", "ctr": "center", "r": "right", "just": "justify"}
+                                if algn in am:
+                                    style["textAlign"] = am[algn]
+
+        # 1. 슬라이드 도형 자체
+        tf = getattr(shape, "text_frame", None)
+        if tf is None:
+            return style
+        txBody = getattr(tf, "_txBody", None) or getattr(tf, "_element", None)
+        _scan_txbody(txBody)
+
+        # 2. Layout Placeholder → 3. Master Placeholder (슬라이드에서 못 찾은 속성 보완)
+        if len(style) < 4 and getattr(shape, "is_placeholder", False):
+            ph_idx = None
+            try:
+                ph_idx = shape.placeholder_format.idx
+            except Exception:
+                pass
+
+            sources: list[Any] = []
+            try:
+                layout = shape.part.slide.slide_layout
+                sources.append(layout)
+                sources.append(layout.slide_master)
+            except Exception:
+                pass
+
+            for src in sources:
+                if len(style) >= 6:
+                    break
+                try:
+                    phs = list(src.placeholders)
+                except Exception:
+                    phs = []
+                for ph in phs:
+                    if ph_idx is not None and getattr(getattr(ph, "placeholder_format", None), "idx", None) != ph_idx:
+                        continue
+                    try:
+                        ph_tf = ph.text_frame
+                        ph_txBody = getattr(ph_tf, "_txBody", None) or getattr(ph_tf, "_element", None)
+                        _scan_txbody(ph_txBody)
+                    except Exception:
+                        pass
+                    break  # 첫 번째 매칭 ph만
+
+    except Exception:
+        pass
+    return style
 
 
 def _pic_geom_emu(pic_elm: Any) -> tuple[int, int, int, int] | None:
@@ -1170,30 +1354,15 @@ def parse_presentation(content: bytes) -> dict[str, Any]:
                 top_pct = _pct(abs_t, slide_h)
                 width_pct = _pct(shape.width, slide_w)
                 height_pct = _pct(shape.height, slide_h)
-                font_size = None
-                try:
-                    tf = getattr(shape, "text_frame", None)
-                    if tf is not None and tf.paragraphs:
-                        run = tf.paragraphs[0].runs
-                        if run and run[0].font.size:
-                            pt = run[0].font.size.pt
-                            if pt and slide_w > 0:
-                                # 슬라이드 너비(pt) 대비 글꼴 pt → CSS cqw (미리보기 박스 기준)
-                                slide_w_pt = float(slide_w) / 12700.0
-                                if slide_w_pt > 0:
-                                    cqw = (float(pt) / slide_w_pt) * 100.0
-                                    cqw = min(max(cqw, 0.4), 14.0)
-                                    font_size = f"{cqw:.4f}cqw"
-                except Exception:
-                    pass
-                style = {
+                text_style = _extract_text_style(shape, slide_w)
+                style: dict[str, Any] = {
                     "left": left_pct,
                     "top": top_pct,
                     "width": width_pct,
                     "height": height_pct,
                 }
-                if font_size:
-                    style["fontSize"] = font_size
+                # 추출된 스타일 병합 (fontSize, color, bold, italic, underline, fontFamily, textAlign)
+                style.update(text_style)
                 elements.append(
                     {
                         "type": "text",

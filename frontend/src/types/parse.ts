@@ -4,6 +4,12 @@ export type SlideElementStyle = {
   width: string;
   height: string;
   fontSize?: string;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontFamily?: string;
+  textAlign?: "left" | "center" | "right" | "justify";
 };
 
 export type SlideElement = {

@@ -124,29 +124,46 @@ export function SlideViewer({
     >
       {ordered.map((el, index) => {
         const isImage = el.type === "image";
+        const s = el.style;
         return (
           <div
             key={index}
             className="pointer-events-auto select-text box-border min-h-0"
             style={{
               position: "absolute",
-              left: el.style.left,
-              top: el.style.top,
-              width: el.style.width,
-              /* PPT 도형 박스 높이에 맞춤. auto+minHeight면 본문이 박스 밖으로 무한 확장됨 */
-              height: el.style.height,
+              left: s.left,
+              top: s.top,
+              width: s.width,
+              height: s.height,
               zIndex: 10 + index,
-              fontSize: normalizeFontSize(el.style.fontSize),
-              lineHeight: 1.25,
+              fontSize: normalizeFontSize(s.fontSize),
+              lineHeight: 1.3,
               display: "flex",
               flexDirection: "column",
               justifyContent: "flex-start",
-              alignItems: "flex-start",
+              alignItems:
+                s.textAlign === "center"
+                  ? "center"
+                  : s.textAlign === "right"
+                    ? "flex-end"
+                    : "flex-start",
               overflow: "hidden",
+              textAlign: s.textAlign ?? "left",
             }}
           >
             {el.type === "text" && el.content ? (
-              <span className="min-h-0 min-w-0 max-w-full whitespace-pre-wrap break-words text-left text-zinc-900">
+              <span
+                className="min-h-0 min-w-0 max-w-full whitespace-pre-wrap break-words"
+                style={{
+                  color: s.color ?? undefined,
+                  fontWeight: s.bold ? 700 : undefined,
+                  fontStyle: s.italic ? "italic" : undefined,
+                  textDecoration: s.underline ? "underline" : undefined,
+                  fontFamily: s.fontFamily ?? undefined,
+                  textAlign: s.textAlign ?? "left",
+                  width: "100%",
+                }}
+              >
                 {normalizeSlideText(el.content)}
               </span>
             ) : null}

@@ -214,180 +214,185 @@ export default function AdminUploadPage() {
       : "max-h-[calc(100vh-6rem)]";
 
   return (
-    <main className="mx-auto max-w-[1600px] px-4 py-8">
-      <h1 className="text-xl font-semibold">Upload / Preview</h1>
-      <p className="mt-1 text-sm text-zinc-600">
-        .pptx 파일을 선택하면 parser-api가 JSON을 반환합니다. DB에는 아직 저장하지
-        않습니다.
-      </p>
+    <main className="min-h-screen bg-zinc-50">
+      {/* 상단 헤더 */}
+      <div className="border-b border-zinc-200 bg-white">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4">
+          <h1 className="text-base font-semibold tracking-tight text-zinc-900">
+            PPTX Upload &amp; Preview
+          </h1>
+          {hasParsedData ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(data, null, 2)], {
+                    type: "application/json;charset=utf-8",
+                  });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = "parse-pptx-full-response.json";
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                  <path d="M7.25 10.44V2.75a.75.75 0 0 1 1.5 0v7.69l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72Z" />
+                  <path d="M2.75 13.25a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H2.75Z" />
+                </svg>
+                JSON 다운로드
+              </button>
 
-      <div className="mt-6 flex flex-wrap items-center gap-4">
-        <input
-          type="file"
-          accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-          disabled={busy}
-          onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
-          className="text-sm"
-        />
-        {busy ? (
-          <span className="text-sm text-zinc-500">Parsing...</span>
-        ) : null}
-        {hasParsedData ? (
-          <button
-            type="button"
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(data, null, 2)], {
-                type: "application/json;charset=utf-8",
-              });
-              const a = document.createElement("a");
-              a.href = URL.createObjectURL(blob);
-              a.download = "parse-pptx-full-response.json";
-              a.click();
-              URL.revokeObjectURL(a.href);
-            }}
-            className="rounded border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50"
-          >
-            전체 응답 JSON 다운로드
-          </button>
-        ) : null}
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-zinc-700">
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                  <path fillRule="evenodd" d="M14 8a.75.75 0 0 1-.75.75H4.56l3.22 3.22a.75.75 0 1 1-1.06 1.06l-4.5-4.5a.75.75 0 0 1 0-1.06l4.5-4.5a.75.75 0 0 1 1.06 1.06L4.56 7.25h8.69A.75.75 0 0 1 14 8Z" clipRule="evenodd" />
+                </svg>
+                새 파일 업로드
+                <input
+                  type="file"
+                  accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                  disabled={busy}
+                  onChange={(e) => {
+                    setData(null);
+                    setSlideIndex(0);
+                    setSlideNotes({});
+                    setTitle("");
+                    setTags("");
+                    titleEditedByUser.current = false;
+                    void onFile(e.target.files?.[0] ?? null);
+                  }}
+                  className="sr-only"
+                />
+              </label>
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {hasParsedData ? (
-        <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-          <span className="font-medium text-zinc-800">슬라이드 래스터</span>
-          {data?.meta?.slideRaster ? (
-            <>
-              {": "}
-              <code className="rounded bg-white px-1 text-xs">
-                {data.meta.slideRaster.status}
-              </code>
-              {data.meta.slideRaster.engine ? (
-                <code className="ml-1.5 rounded bg-zinc-200 px-1 text-xs text-zinc-700">
-                  engine: {data.meta.slideRaster.engine}
-                </code>
-              ) : null}
-              {typeof data.meta.slideRaster.slidesRendered === "number" ? (
-                <span className="text-zinc-600">
-                  {" "}
-                  ({data.meta.slideRaster.slidesRendered}/{slides.length}장 JPEG)
-                </span>
-              ) : null}
-              {data.meta.slideRaster.reason ? (
-                <span className="mt-1 block text-xs text-zinc-600">
-                  {data.meta.slideRaster.reason}
-                </span>
-              ) : null}
-              {data.meta.slideRaster.pptComFallbackReason ? (
-                <span className="mt-1 block rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
-                  PowerPoint COM 실패 → LibreOffice 사용 중
-                  <span className="ml-1 font-mono opacity-80">
-                    ({data.meta.slideRaster.pptComFallbackReason})
-                  </span>
-                </span>
-              ) : null}
-              {data.meta.slideRaster.missingFonts?.length ? (
-                <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-900">
-                  <strong>래스터 텍스트 누락 원인 — 미설치 폰트 감지됨</strong>
-                  <div className="mt-1 font-mono">
-                    {data.meta.slideRaster.missingFonts.join(", ")}
-                  </div>
-                  <div className="mt-1 text-red-700">
-                    {data.meta.slideRaster.missingFontHint}
-                  </div>
-                </div>
-              ) : data.meta.slideRaster.pptxFonts?.length ? (
-                <details className="mt-1">
-                  <summary className="cursor-pointer text-xs text-zinc-500">
-                    사용된 폰트 {data.meta.slideRaster.pptxFonts.length}종 (모두 시스템에 있음)
-                  </summary>
-                  <div className="mt-0.5 font-mono text-[11px] text-zinc-600">
-                    {data.meta.slideRaster.pptxFonts.join(", ")}
-                  </div>
-                </details>
-              ) : null}
-            </>
-          ) : (
-            <span className="text-amber-800">
-              {" "}
-              meta.slideRaster 없음 — parser-api를 최신 코드로 띄웠는지,{" "}
-              <code className="rounded bg-amber-100 px-1">pip install -r requirements.txt</code>{" "}
-              후 재시작했는지 확인하세요.
-            </span>
-          )}
-          <span className="mt-1 block text-xs text-zinc-500">
-            우측 JSON의{" "}
-            <code className="rounded bg-zinc-200 px-0.5">elements[].src</code>는
-            용량 때문에 축약 표시됩니다. 슬라이드 통째 이미지는{" "}
-            <code className="rounded bg-zinc-200 px-0.5">rasterPreview</code> 필드(동일
-            축약)와 가운데 하단 미리보기입니다.
-          </span>
+      <div className="mx-auto max-w-[1600px] px-6 py-6">
+
+      {/* 에러 */}
+      {error ? (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-500" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+            <path fillRule="evenodd" d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1ZM7.25 5.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5Zm.75 6.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clipRule="evenodd" />
+          </svg>
+          <p className="text-sm text-red-800">{error}</p>
         </div>
       ) : null}
 
-      {error ? (
-        <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
+      {parserStale && data ? (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+            <path fillRule="evenodd" d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1ZM7.25 5.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5Zm.75 6.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clipRule="evenodd" />
+          </svg>
+          <div className="text-sm text-amber-900">
+            <strong>parser-api 버전 불일치</strong> — 최신 코드로 백엔드를 재시작하세요.
+          </div>
+        </div>
       ) : null}
 
-      {parserStale && data ? (
-        <p className="mt-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          연결된 파서가 이 프로젝트의 최신 parser-api가 아닌 것 같습니다. (
-          <code className="rounded bg-amber-100 px-1">meta.parserApiBuild</code> 없음)
-          <br />
-          <span className="mt-1 block text-amber-900/90">
-            1) 브라우저에서{" "}
-            <code className="rounded bg-amber-100 px-1">http://127.0.0.1:8010/health</code>{" "}
-            를 열어 <code className="rounded bg-amber-100 px-1">parserApiBuild</code>가
-            보이는지 확인
-            <br />
-            2) <code className="rounded bg-amber-100 px-1">frontend/.env.local</code>의{" "}
-            <code className="rounded bg-amber-100 px-1">PARSER_API_URL</code>이 그 서버(
-            보통 <code className="rounded bg-amber-100 px-1">http://127.0.0.1:8010</code>)
-            를 가리키는지 확인 후 Next dev 서버 재시작
-            <br />
-            3) <code className="rounded bg-amber-100 px-1">PPTX_Parsing/parser-api</code>
-            에서 <code className="rounded bg-amber-100 px-1">start-backend.bat</code>로 백엔드
-            실행
+      {/* 파싱 결과 요약 배너 */}
+      {hasParsedData && data?.meta?.slideRaster ? (
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 shadow-sm">
+          {/* 엔진 배지 */}
+          {data.meta.slideRaster.engine === "powerpoint-com" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              PowerPoint COM
+            </span>
+          ) : data.meta.slideRaster.engine === "libreoffice" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-sky-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+              LibreOffice
+            </span>
+          ) : null}
+          {/* 슬라이드 수 */}
+          <span className="text-xs text-zinc-500">
+            <span className="font-medium text-zinc-800">{slides.length}</span>장 슬라이드
           </span>
-        </p>
+          {typeof data.meta.slideRaster.slidesRendered === "number" ? (
+            <span className="text-xs text-zinc-500">
+              래스터 <span className="font-medium text-zinc-800">{data.meta.slideRaster.slidesRendered}</span>/{slides.length}장
+            </span>
+          ) : null}
+          {/* 파일명 */}
+          {data.meta.title ? (
+            <span className="ml-auto truncate text-xs text-zinc-400">{data.meta.title}</span>
+          ) : null}
+
+          {/* PPT COM fallback 경고 */}
+          {data.meta.slideRaster.pptComFallbackReason ? (
+            <div className="w-full border-t border-zinc-100 pt-2 text-xs text-amber-700">
+              PowerPoint COM 실패, LibreOffice 사용 중
+              <span className="ml-1 font-mono text-[11px] opacity-75">({data.meta.slideRaster.pptComFallbackReason})</span>
+            </div>
+          ) : null}
+          {/* 폰트 누락 경고 */}
+          {data.meta.slideRaster.missingFonts?.length ? (
+            <div className="w-full border-t border-zinc-100 pt-2 text-xs text-red-700">
+              미설치 폰트 감지: <span className="font-mono">{data.meta.slideRaster.missingFonts.join(", ")}</span>
+            </div>
+          ) : data.meta.slideRaster.pptxFonts?.length ? (
+            <details className="w-full border-t border-zinc-100 pt-2">
+              <summary className="cursor-pointer text-xs text-zinc-400">
+                폰트 {data.meta.slideRaster.pptxFonts.length}종 (모두 설치됨)
+              </summary>
+              <p className="mt-1 font-mono text-[11px] text-zinc-500">{data.meta.slideRaster.pptxFonts.join(", ")}</p>
+            </details>
+          ) : null}
+        </div>
       ) : null}
 
       {hasParsedData ? (
-        <div className="mt-8">
-          {/* lg: 가운데 미리보기 높이(px)를 ResizeObserver로 재서 양옆 카드에 동일 적용 · JSON은 패널 내부 스크롤 */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,17.5rem)_minmax(0,1fr)_minmax(0,22rem)] lg:items-stretch">
-          {/* lg: 메타 고정폭 · 미리보기가 남는 폭 전부 · JSON 고정폭(내부 스크롤). minmax(0,…)로 긴 JSON이 가운데 열을 압축하지 않게 함 */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,22rem)] lg:items-stretch">
+
+          {/* ── 좌: 메타데이터 카드 ── */}
           <aside
-            className={`order-2 flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:order-1 ${sideCardHeightClass}`}
+            className={`order-2 flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm lg:sticky lg:top-4 lg:order-1 ${sideCardHeightClass}`}
             style={sideCardHeightStyle}
           >
-            <h2 className="shrink-0 text-sm font-medium text-zinc-800">
-              Metadata (draft)
-            </h2>
-            <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-0.5">
-              <label className="block text-xs text-zinc-500">
-                Title (슬라이드 설명 첫 줄에서 자동 반영 · 직접 수정하면 고정)
+            <div className="flex h-14 shrink-0 items-center border-b border-zinc-100 px-5">
+              <div>
+                <h2 className="text-[13px] font-semibold text-zinc-800">Metadata</h2>
+                <p className="text-[11px] text-zinc-400">제목·태그·슬라이드 설명 입력</p>
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-5">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                  Title
+                </label>
                 <input
                   value={title}
                   onChange={(e) => {
                     titleEditedByUser.current = true;
                     setTitle(e.target.value);
                   }}
-                  className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                  placeholder="강의 제목"
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 placeholder-zinc-300 transition focus:border-zinc-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200"
                 />
-              </label>
-              <label className="block text-xs text-zinc-500">
-                Tags (comma-separated)
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                  Tags
+                </label>
                 <input
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
-                  className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                  placeholder="ai, 분석, agent"
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 placeholder-zinc-300 transition focus:border-zinc-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200"
                 />
-              </label>
+              </div>
+
               {current ? (
-                <label className="block text-xs text-zinc-500">
-                  슬라이드 설명 (Slide {current.slideNumber})
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                    슬라이드 {current.slideNumber} 설명
+                  </label>
                   <textarea
                     value={currentSlideNote}
                     onChange={(e) => {
@@ -398,26 +403,28 @@ export default function AdminUploadPage() {
                       }));
                     }}
                     rows={5}
-                    placeholder="강사가 이 슬라이드에서 전달할 핵심 메시지를 줄글로 작성하세요."
-                    className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                    placeholder="강사가 이 슬라이드에서 전달할 핵심 메시지를 작성하세요."
+                    className="w-full resize-none rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 placeholder-zinc-300 transition focus:border-zinc-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200"
                   />
-                </label>
+                </div>
               ) : null}
-              <div className="block text-xs text-zinc-500">
-                Description (자동: 슬라이드 설명 합본)
+
+              <div>
+                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                  Description <span className="normal-case font-normal text-zinc-300">(자동 합본)</span>
+                </label>
                 <textarea
                   readOnly
                   value={descriptionFromSlides}
-                  rows={5}
-                  placeholder="슬라이드마다 설명을 입력하면 여기에 순서대로 합쳐집니다."
-                  className="mt-1 w-full cursor-default whitespace-pre-wrap rounded border border-dashed border-zinc-300 bg-zinc-50 px-2 py-1.5 text-sm text-zinc-800"
+                  rows={4}
+                  placeholder="슬라이드마다 설명을 입력하면 여기에 합쳐집니다."
+                  className="w-full resize-none cursor-default rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-2 text-sm text-zinc-600 placeholder-zinc-300"
                 />
               </div>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2.5">
-                <p className="text-[11px] text-zinc-500">
-                  Parsed metadata utility
-                </p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+
+              {/* 유틸 버튼 */}
+              <div className="mt-auto space-y-2 border-t border-zinc-100 pt-4">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -425,7 +432,7 @@ export default function AdminUploadPage() {
                       setTags((data?.meta?.tags ?? []).join(", "));
                       titleEditedByUser.current = true;
                     }}
-                    className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50"
+                    className="rounded-lg border border-zinc-200 bg-white py-1.5 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50"
                   >
                     초안값 복원
                   </button>
@@ -437,190 +444,197 @@ export default function AdminUploadPage() {
                       setTags("");
                       setSlideNotes({});
                     }}
-                    className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50"
+                    className="rounded-lg border border-zinc-200 bg-white py-1.5 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50"
                   >
-                    입력 초기화
+                    전체 초기화
                   </button>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
                     titleEditedByUser.current = false;
-                    const t =
-                      deriveTitleFromSlideNotes(slides, slideNotes) ||
-                      fallbackTitleFromParser;
+                    const t = deriveTitleFromSlideNotes(slides, slideNotes) || fallbackTitleFromParser;
                     setTitle(t);
                   }}
-                  className="mt-2 w-full rounded border border-zinc-200 bg-white px-2 py-1.5 text-[11px] text-zinc-600 hover:bg-zinc-50"
+                  className="w-full rounded-lg border border-zinc-200 bg-white py-1.5 text-xs text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-50"
                 >
-                  제목을 슬라이드 설명 기준으로 다시 맞추기
+                  슬라이드 설명 기준으로 제목 맞추기
                 </button>
+                <p className="text-center text-[11px] text-zinc-300">
+                  Publish · embeddings · DB insert — 다음 단계
+                </p>
               </div>
-              <p className="text-xs text-zinc-400">
-                Final publish, embeddings, and DB insert come in a later step.
-              </p>
             </div>
           </aside>
 
+          {/* ── 가운데: 슬라이드 미리보기 카드 ── */}
           <div className="order-1 flex h-full min-h-0 w-full min-w-0 items-start lg:order-2">
             {current ? (
               <div
                 ref={previewCardRef}
-                className="flex w-full min-w-0 flex-col overflow-x-hidden rounded-xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50/80 p-4 shadow-sm"
+                className="flex w-full min-w-0 flex-col overflow-x-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
               >
-                <p className="mb-3 shrink-0 text-center text-xs text-zinc-500">
-                  슬라이드 {current.slideNumber} — 추출된 도형{" "}
-                  {(current.elements ?? []).length}개
-                  {(current.plainText ?? "").trim()
-                    ? ` · plainText ${(current.plainText ?? "").length}자`
-                    : ""}
-                </p>
-                <div className="w-full min-w-0 shrink-0">
-                  <SlideViewer
-                    elements={current.elements ?? []}
-                    className="mx-auto w-full max-w-full"
-                    aspectRatio={slideAspectRatio}
-                    canvasPaddingBottomPercent={slideCanvasPaddingBottomPct}
-                  />
-                </div>
-                <nav
-                  className="mt-4 flex shrink-0 items-center justify-center gap-2"
-                  aria-label="슬라이드 이동"
-                >
-                  <button
-                    type="button"
-                    disabled={!canPrevSlide}
-                    onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
-                    aria-label="이전 슬라이드"
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-35"
-                  >
-                    <span className="sr-only">이전</span>
-                    <svg
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                      aria-hidden
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-                  <span className="min-w-[5.5rem] select-none text-center text-sm tabular-nums text-zinc-600">
-                    <span className="font-medium text-zinc-800">
-                      {slideIndex + 1}
+                {/* 슬라이드 정보 바 */}
+                <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-5">
+                  <span className="text-[13px] font-semibold text-zinc-800">
+                    슬라이드 {current.slideNumber}
+                    <span className="ml-2 text-xs font-normal text-zinc-400">
+                      도형 {(current.elements ?? []).length}개
+                      {(current.plainText ?? "").trim()
+                        ? ` · ${(current.plainText ?? "").length}자`
+                        : ""}
                     </span>
-                    <span className="text-zinc-400"> / </span>
-                    {slides.length}
                   </span>
-                  <button
-                    type="button"
-                    disabled={!canNextSlide}
-                    onClick={() =>
-                      setSlideIndex((i) =>
-                        Math.min(slides.length - 1, i + 1),
-                      )
-                    }
-                    aria-label="다음 슬라이드"
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-35"
-                  >
-                    <span className="sr-only">다음</span>
-                    <svg
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                      aria-hidden
+                  {/* 네비게이션 */}
+                  <nav className="flex items-center gap-1.5" aria-label="슬라이드 이동">
+                    <button
+                      type="button"
+                      disabled={!canPrevSlide}
+                      onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
+                      aria-label="이전 슬라이드"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:pointer-events-none disabled:opacity-30"
                     >
-                      <path
-                        fillRule="evenodd"
-                        d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-                </nav>
-                {current.rasterPreview ? (
-                  /* block 레이아웃: flex-col 자식 + absolute만 있으면 min-height:auto가 0으로 잡혀 padding 박스가 납작해짐 */
-                  <div className="mt-4 min-w-0 shrink-0 space-y-1.5">
-                    <p className="text-center text-[11px] text-zinc-500">
-                      슬라이드 래스터 미리보기 (PPT→PDF→이미지, JSON 퍼센트 좌표와 동일 비율)
+                      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                        <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                    <span className="min-w-[4.5rem] select-none text-center text-xs tabular-nums text-zinc-500">
+                      <span className="font-semibold text-zinc-800">{slideIndex + 1}</span>
+                      <span className="text-zinc-300"> / </span>
+                      {slides.length}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!canNextSlide}
+                      onClick={() => setSlideIndex((i) => Math.min(slides.length - 1, i + 1))}
+                      aria-label="다음 슬라이드"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                        <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </nav>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  {/* 추출 미리보기 */}
+                  <div>
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                      HTML 렌더링 <span className="normal-case font-normal">— 텍스트·도형을 퍼센트 좌표로 재현</span>
                     </p>
-                    <div
-                      className="relative isolate h-0 w-full min-w-0 max-w-full overflow-hidden rounded-md border border-zinc-200 bg-black shadow-inner"
-                      style={{
-                        paddingBottom: `${slideCanvasPaddingBottomPct}%`,
-                      }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- parser data URL; absolute so intrinsic JPEG size cannot expand the box */}
-                      <img
-                        src={current.rasterPreview}
-                        alt=""
-                        className="absolute inset-0 box-border h-full w-full max-h-full max-w-full object-contain object-center"
-                      />
-                    </div>
+                    <SlideViewer
+                      elements={current.elements ?? []}
+                      className="mx-auto w-full max-w-full"
+                      aspectRatio={slideAspectRatio}
+                      canvasPaddingBottomPercent={slideCanvasPaddingBottomPct}
+                    />
                   </div>
-                ) : (
-                  <div className="min-h-0 flex-1" aria-hidden="true" />
-                )}
-                {slideRasterMeta?.status === "ok" && !current.rasterPreview ? (
-                  <p className="mt-2 shrink-0 text-center text-[11px] text-amber-800">
-                    이 슬라이드에 rasterPreview가 없습니다. (해당 페이지 렌더 실패 또는 응답
-                    불완전 가능)
-                  </p>
-                ) : null}
-                {slideRasterMeta &&
-                slideRasterMeta.status &&
-                slideRasterMeta.status !== "ok" ? (
-                  <p
-                    className={`mt-3 shrink-0 rounded border px-2 py-1.5 text-center text-[11px] ${
-                      slideRasterMeta.status === "error"
-                        ? "border-red-200 bg-red-50 text-red-900"
-                        : slideRasterMeta.status === "disabled"
-                          ? "border-zinc-200 bg-zinc-50 text-zinc-600"
-                          : "border-amber-200 bg-amber-50 text-amber-950"
-                    }`}
-                  >
-                    래스터 {slideRasterMeta.status}:{" "}
-                    {slideRasterMeta.reason || "(사유 없음)"}
-                    {slideRasterMeta.renderErrorsSample?.length ? (
-                      <span className="mt-1 block font-mono text-[10px] opacity-90">
-                        {slideRasterMeta.renderErrorsSample.join(" | ")}
-                      </span>
-                    ) : null}
-                  </p>
-                ) : null}
-                {slideRasterMeta?.status === "ok" &&
-                slideRasterMeta.pageCountMismatch ? (
-                  <p className="mt-2 shrink-0 text-center text-[11px] text-amber-800">
-                    PDF 페이지 수와 슬라이드 수 불일치: PDF{" "}
-                    {slideRasterMeta.pageCountMismatch.pdfPages}장 / PPTX{" "}
-                    {slideRasterMeta.pageCountMismatch.pptxSlides}장
-                  </p>
-                ) : null}
+
+                  {/* 래스터 미리보기 */}
+                  {current.rasterPreview ? (
+                    <div>
+                      <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                        원본 슬라이드 이미지 <span className="normal-case font-normal">— PowerPoint가 직접 렌더링한 결과</span>
+                      </p>
+                      <div
+                        className="relative isolate h-0 w-full overflow-hidden rounded-xl border border-zinc-100 bg-zinc-900 shadow-inner"
+                        style={{ paddingBottom: `${slideCanvasPaddingBottomPct}%` }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={current.rasterPreview}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-contain"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* 래스터 오류 메시지 */}
+                  {slideRasterMeta?.status === "ok" && !current.rasterPreview ? (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-[11px] text-amber-700">
+                      이 슬라이드의 래스터가 없습니다. (렌더 실패 또는 응답 불완전)
+                    </p>
+                  ) : null}
+                  {slideRasterMeta?.status && slideRasterMeta.status !== "ok" ? (
+                    <p className={`rounded-lg px-3 py-2 text-center text-[11px] ${
+                      slideRasterMeta.status === "error" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-800"
+                    }`}>
+                      래스터 {slideRasterMeta.status}: {slideRasterMeta.reason || "(사유 없음)"}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>
 
+          {/* ── 우: JSON 뷰어 카드 ── */}
           <aside
-            className={`order-3 flex min-h-0 w-full min-w-0 flex-col overflow-hidden lg:order-3 lg:sticky lg:top-4 ${sideCardHeightClass}`}
+            className={`order-3 flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm lg:order-3 lg:sticky lg:top-4 ${sideCardHeightClass}`}
             style={sideCardHeightStyle}
           >
             {current ? (
-              <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
-                <div className="shrink-0 border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-medium text-zinc-800">
-                  현재 슬라이드 JSON (미리보기 · data URL 축약)
+              <>
+                <div className="flex h-14 shrink-0 items-center border-b border-zinc-100 px-5">
+                  <div>
+                    <h2 className="text-[13px] font-semibold text-zinc-800">JSON</h2>
+                    <p className="text-[11px] text-zinc-400">파서가 추출한 좌표·텍스트·이미지 구조 데이터</p>
+                  </div>
                 </div>
-                <pre className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-contain break-all bg-white p-3 font-mono text-[11px] leading-relaxed text-zinc-800">
+                <pre className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-contain break-all bg-zinc-950 p-4 font-mono text-[11px] leading-relaxed text-emerald-300">
                   {slideJsonForPreview(current)}
                 </pre>
-              </div>
+              </>
             ) : null}
           </aside>
-          </div>
         </div>
       ) : null}
+
+      {/* 업로드 드롭존 */}
+      {!hasParsedData ? (
+        <label
+          className={`mx-auto mb-6 flex max-w-xl cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed py-14 text-center transition ${
+            busy
+              ? "cursor-not-allowed border-zinc-200 bg-zinc-50 opacity-60"
+              : "border-zinc-300 bg-white hover:border-zinc-400 hover:bg-zinc-50"
+          }`}
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400">
+            {busy ? (
+              <svg className="h-7 w-7 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+              </svg>
+            ) : (
+              <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 7.5m0 0L7.5 12M12 7.5v9" />
+              </svg>
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-zinc-700">
+              {busy ? "파싱 중..." : "PPTX 파일을 선택하세요"}
+            </p>
+            {!busy ? (
+              <p className="mt-1 text-xs text-zinc-400">.pptx 파일만 지원합니다</p>
+            ) : null}
+          </div>
+          {!busy ? (
+            <span className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-zinc-700">
+              파일 선택
+            </span>
+          ) : null}
+          <input
+            type="file"
+            accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            disabled={busy}
+            onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+            className="sr-only"
+          />
+        </label>
+      ) : null}
+      </div>
     </main>
   );
 }
