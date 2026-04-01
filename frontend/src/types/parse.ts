@@ -31,6 +31,10 @@ export type SlideRasterMeta = {
   enabled?: boolean;
   status?: string;
   reason?: string;
+  /** 래스터 엔진: "powerpoint-com" | "libreoffice" */
+  engine?: string;
+  /** PowerPoint COM 실패 후 LibreOffice fallback 시 PPT COM 실패 사유 */
+  pptComFallbackReason?: string;
   longEdgePx?: number;
   jpegQuality?: number;
   slidesRendered?: number;

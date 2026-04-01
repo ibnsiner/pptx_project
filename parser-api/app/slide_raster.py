@@ -74,7 +74,10 @@ def collect_pptx_fonts(pptx_bytes: bytes) -> list[str]:
 def _check_system_fonts(font_names: list[str]) -> list[str]:
     """
     시스템에 설치된 폰트 목록과 대조해 없는 폰트 반환.
-    fc-list(Linux/Mac) 또는 Windows 폰트 폴더 이름 스캔을 사용.
+    fc-list(Linux/Mac) 또는 Windows 폰트 폴더 이름 + 레지스트리 스캔.
+
+    Windows에서는 파일명 stem 뿐 아니라 레지스트리에 등록된 실제 폰트 패밀리명도 확인해
+    "Cambria Math", "맑은 고딕" 같은 시스템 폰트 오탐을 방지한다.
     """
     import platform
 
@@ -83,7 +86,7 @@ def _check_system_fonts(font_names: list[str]) -> list[str]:
         return missing
 
     system = platform.system()
-    installed: set[str] = set()
+    installed_names: set[str] = set()
 
     if system in ("Linux", "Darwin"):
         try:
@@ -95,10 +98,34 @@ def _check_system_fonts(font_names: list[str]) -> list[str]:
             )
             for line in result.stdout.splitlines():
                 for part in line.split(","):
-                    installed.add(part.strip().lower())
+                    installed_names.add(part.strip().lower())
         except Exception:
             return []
+
     elif system == "Windows":
+        import winreg
+
+        # 1. 레지스트리: 등록된 폰트 표시명(키 이름)을 수집 — "Malgun Gothic (TrueType)" 형태
+        for hive, subkey in [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"),
+            (winreg.HKEY_CURRENT_USER,  r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"),
+        ]:
+            try:
+                with winreg.OpenKey(hive, subkey) as k:
+                    i = 0
+                    while True:
+                        try:
+                            name, _, _ = winreg.EnumValue(k, i)
+                            # "(TrueType)", "(OpenType)" 등 접미사 제거
+                            clean = name.split("(")[0].strip().lower()
+                            installed_names.add(clean)
+                            i += 1
+                        except OSError:
+                            break
+            except OSError:
+                pass
+
+        # 2. 폴더 stem 보조 (레지스트리에 없는 경우 대비)
         font_dirs = [
             Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts",
             Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "Windows" / "Fonts",
@@ -106,16 +133,59 @@ def _check_system_fonts(font_names: list[str]) -> list[str]:
         for d in font_dirs:
             if d.is_dir():
                 for f in d.iterdir():
-                    installed.add(f.stem.lower())
+                    installed_names.add(f.stem.lower())
+
     else:
         return []
 
+    # 한글 폰트명 → 영문 등록명 별칭 (PPTX는 한글명, 레지스트리는 영문명으로 저장되는 경우)
+    FONT_ALIASES: dict[str, list[str]] = {
+        "프리젠테이션": ["freesentation"],
+        "나눔고딕": ["nanumgothic", "nanum gothic"],
+        "나눔명조": ["nanummyeongjo", "nanum myeongjo"],
+        "나눔바른고딕": ["nanumbarungothic"],
+        "맑은고딕": ["malgun gothic", "malgun"],
+        "맑은 고딕": ["malgun gothic", "malgun"],
+        "굴림": ["gulim"],
+        "돋움": ["dotum"],
+        "바탕": ["batang"],
+        "궁서": ["gungsuh"],
+    }
+
+    def _normalize(s: str) -> str:
+        return s.lower().replace(" ", "").replace("-", "").replace("_", "")
+
+    installed_normalized = {_normalize(n) for n in installed_names}
+
     for font in font_names:
-        normalized = font.lower().replace(" ", "").replace("-", "")
-        found = any(
-            normalized in installed_f.replace(" ", "").replace("-", "")
-            for installed_f in installed
+        norm = _normalize(font)
+
+        # 1. 직접 정규화 매칭
+        found = norm in installed_normalized or any(
+            norm in inst or inst in norm
+            for inst in installed_normalized
+            if len(inst) >= 4
         )
+
+        # 2. 별칭으로 재시도 (한글명 → 영문명)
+        if not found:
+            aliases: list[str] = []
+            for k, v in FONT_ALIASES.items():
+                # 폰트명이 별칭 키를 포함하거나 역으로 포함될 때 (굵기 접미사 포함 대응)
+                norm_k = _normalize(k)
+                if norm_k in norm or norm in norm_k:
+                    aliases.extend(v)
+
+            if aliases:
+                found = any(
+                    any(
+                        _normalize(alias) in inst or inst in _normalize(alias)
+                        for inst in installed_normalized
+                        if len(inst) >= 4
+                    )
+                    for alias in aliases
+                )
+
         if not found:
             missing.append(font)
     return missing

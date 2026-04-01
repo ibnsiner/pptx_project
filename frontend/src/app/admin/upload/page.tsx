@@ -261,6 +261,11 @@ export default function AdminUploadPage() {
               <code className="rounded bg-white px-1 text-xs">
                 {data.meta.slideRaster.status}
               </code>
+              {data.meta.slideRaster.engine ? (
+                <code className="ml-1.5 rounded bg-zinc-200 px-1 text-xs text-zinc-700">
+                  engine: {data.meta.slideRaster.engine}
+                </code>
+              ) : null}
               {typeof data.meta.slideRaster.slidesRendered === "number" ? (
                 <span className="text-zinc-600">
                   {" "}
@@ -270,6 +275,14 @@ export default function AdminUploadPage() {
               {data.meta.slideRaster.reason ? (
                 <span className="mt-1 block text-xs text-zinc-600">
                   {data.meta.slideRaster.reason}
+                </span>
+              ) : null}
+              {data.meta.slideRaster.pptComFallbackReason ? (
+                <span className="mt-1 block rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                  PowerPoint COM 실패 → LibreOffice 사용 중
+                  <span className="ml-1 font-mono opacity-80">
+                    ({data.meta.slideRaster.pptComFallbackReason})
+                  </span>
                 </span>
               ) : null}
               {data.meta.slideRaster.missingFonts?.length ? (

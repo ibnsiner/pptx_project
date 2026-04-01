@@ -18,10 +18,11 @@ from pptx.oxml.ns import qn
 from pptx.shapes.group import GroupShape
 
 from app.slide_raster import render_slide_rasters_jpeg
+from app.slide_raster_ppt import render_slide_rasters_ppt
 
 app = FastAPI(title="PPTX Parser API")
 
-PARSER_API_BUILD = "2026-03-31-slide-raster3"
+PARSER_API_BUILD = "2026-04-01-ppt-com-raster"
 
 app.add_middleware(
     CORSMiddleware,
@@ -1347,7 +1348,28 @@ async def parse_pptx(file: UploadFile = File(...)):
     try:
         payload = parse_presentation(content)
         slides = payload.get("slides") or []
-        raster_urls, raster_meta = render_slide_rasters_jpeg(content, len(slides))
+
+        import asyncio, logging
+        logger = logging.getLogger("pptx_raster")
+
+        # PowerPoint COM은 STA COM이라 async 이벤트 루프 스레드에서 직접 호출하면
+        # 아파트먼트 충돌이 발생함 → 전용 스레드에서 실행
+        raster_urls, raster_meta = await asyncio.to_thread(
+            render_slide_rasters_ppt, content, len(slides)
+        )
+        ppt_status = raster_meta.get("status")
+        ppt_reason = raster_meta.get("reason", "")
+        logger.warning("[raster] ppt-com status=%s reason=%s", ppt_status, ppt_reason)
+
+        if ppt_status not in ("ok", "partial"):
+            # PPT COM 실패 이유를 meta에 보존하고 LO로 재시도
+            lo_urls, lo_meta = await asyncio.to_thread(
+                render_slide_rasters_jpeg, content, len(slides)
+            )
+            lo_meta["pptComFallbackReason"] = ppt_reason or "ppt-com status=" + str(ppt_status)
+            lo_meta["engine"] = "libreoffice"
+            raster_urls, raster_meta = lo_urls, lo_meta
+        
         for slide_dict, url in zip(slides, raster_urls):
             if url:
                 slide_dict["rasterPreview"] = url
