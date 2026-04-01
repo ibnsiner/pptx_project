@@ -84,6 +84,7 @@ export default function AdminUploadPage() {
   const [tags, setTags] = useState("");
   const titleEditedByUser = useRef(false);
   const [descModalOpen, setDescModalOpen] = useState(false);
+  const [jsonCopied, setJsonCopied] = useState(false);
   const previewCardRef = useRef<HTMLDivElement>(null);
   const [previewColumnHeightPx, setPreviewColumnHeightPx] = useState<
     number | null
@@ -589,10 +590,60 @@ export default function AdminUploadPage() {
           >
             {current ? (
               <>
-                <div className="flex h-14 shrink-0 items-center border-b border-zinc-100 px-5">
+                <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-5">
                   <div>
                     <h2 className="text-[13px] font-semibold text-zinc-800">JSON</h2>
-                    <p className="text-[11px] text-zinc-400">파서가 추출한 좌표·텍스트·이미지 구조 데이터</p>
+                    <p className="text-[11px] text-zinc-400">슬라이드 {current.slideNumber} · 구조 데이터</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {/* 복사 버튼 */}
+                    <button
+                      type="button"
+                      aria-label="슬라이드 JSON 복사"
+                      onClick={() => {
+                        void navigator.clipboard
+                          .writeText(JSON.stringify(current, null, 2))
+                          .then(() => {
+                            setJsonCopied(true);
+                            setTimeout(() => setJsonCopied(false), 2000);
+                          });
+                      }}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-400 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-700"
+                      title="클립보드에 복사"
+                    >
+                      {jsonCopied ? (
+                        <svg className="h-3.5 w-3.5 text-emerald-500" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                          <path fillRule="evenodd" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                          <path d="M10.5 1.5A1.5 1.5 0 0 0 9 0H7A1.5 1.5 0 0 0 5.5 1.5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-10a2 2 0 0 0-2-2h-1.5ZM9 1.5v1h-2v-1h2ZM4 4h8v9H4V4Z" />
+                        </svg>
+                      )}
+                    </button>
+                    {/* 다운로드 버튼 */}
+                    <button
+                      type="button"
+                      aria-label="슬라이드 JSON 다운로드"
+                      onClick={() => {
+                        const blob = new Blob(
+                          [JSON.stringify(current, null, 2)],
+                          { type: "application/json;charset=utf-8" },
+                        );
+                        const a = document.createElement("a");
+                        a.href = URL.createObjectURL(blob);
+                        a.download = `slide-${current.slideNumber}.json`;
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                      }}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-400 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-700"
+                      title="JSON 파일로 저장"
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                        <path d="M7.25 10.44V2.75a.75.75 0 0 1 1.5 0v7.69l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72Z" />
+                        <path d="M2.75 13.25a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H2.75Z" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
                 <pre className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-contain break-all bg-zinc-950 p-4 font-mono text-[11px] leading-relaxed text-emerald-300">

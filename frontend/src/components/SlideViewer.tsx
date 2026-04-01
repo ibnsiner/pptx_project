@@ -128,13 +128,17 @@ export function SlideViewer({
         return (
           <div
             key={index}
-            className="pointer-events-auto select-text box-border min-h-0"
+            className="pointer-events-auto select-text box-border"
             style={{
               position: "absolute",
               left: s.left,
               top: s.top,
               width: s.width,
-              height: s.height,
+              // 텍스트는 minHeight: PPT는 기본적으로 텍스트가 박스 아래로 넘쳐도 표시됨
+              // 이미지는 height 고정 + overflow hidden 으로 박스 안에 맞춤
+              ...(isImage
+                ? { height: s.height, overflow: "hidden" }
+                : { minHeight: s.height, overflow: "visible" }),
               zIndex: 10 + index,
               fontSize: normalizeFontSize(s.fontSize),
               lineHeight: 1.3,
@@ -147,7 +151,6 @@ export function SlideViewer({
                   : s.textAlign === "right"
                     ? "flex-end"
                     : "flex-start",
-              overflow: "hidden",
               textAlign: s.textAlign ?? "left",
             }}
           >
