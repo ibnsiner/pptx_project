@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import type { SlideElement } from "@/types/parse";
 
 function parsePercent(s: string): number {
@@ -66,35 +66,61 @@ function SlideRaster({ src }: { src: string }) {
 type Props = {
   elements?: SlideElement[] | null;
   className?: string;
+  /** 슬라이드 캔버스 종횡비 (CSS aspect-ratio). canvasPaddingBottomPercent 없을 때만 사용 */
+  aspectRatio?: string;
+  /**
+   * (slideHeight/slideWidth)*100 — padding-bottom % 트릭으로 캔버스 높이 고정.
+   * 래스터 미리보기와 픽셀 단위로 동일한 방식으로 맞출 때 전달.
+   */
+  canvasPaddingBottomPercent?: number;
 };
 
-export function SlideViewer({ elements, className = "" }: Props) {
+export function SlideViewer({
+  elements,
+  className = "",
+  aspectRatio = "16 / 9",
+  canvasPaddingBottomPercent,
+}: Props) {
   const ordered = useMemo(
     () => sortElementsForPaintOrder(elements ?? []),
     [elements],
   );
 
+  const canvasBoxStyle =
+    canvasPaddingBottomPercent != null
+      ? ({
+          height: 0,
+          paddingBottom: `${canvasPaddingBottomPercent}%`,
+          containerType: "inline-size" as const,
+          overflow: "hidden" as const,
+        } satisfies CSSProperties)
+      : ({
+          aspectRatio,
+          containerType: "inline-size" as const,
+          overflow: "hidden" as const,
+        } satisfies CSSProperties);
+
+  const h0WhenPb =
+    canvasPaddingBottomPercent != null ? "h-0 " : "";
+
   if (!elements?.length) {
     return (
       <div
-        className={`relative flex w-full max-w-full items-center justify-center rounded-md border border-dashed border-zinc-300 bg-zinc-50 text-sm text-zinc-500 ${className}`}
-        style={{ aspectRatio: "16/9" }}
+        className={`relative ${h0WhenPb}min-w-0 w-full max-w-full rounded-md border border-dashed border-zinc-300 bg-zinc-50 text-sm text-zinc-500 ${className}`}
+        style={canvasBoxStyle}
       >
-        이 슬라이드에서 추출된 도형이 없습니다. (텍스트만 다른 슬라이드에 있거나 파서 한계일 수
-        있습니다.)
+        <div className="absolute inset-0 flex items-center justify-center px-2 text-center">
+          이 슬라이드에서 추출된 도형이 없습니다. (텍스트만 다른 슬라이드에 있거나 파서 한계일 수
+          있습니다.)
+        </div>
       </div>
     );
   }
 
   return (
     <div
-      className={`relative w-full max-w-full rounded-md border border-zinc-200 bg-white shadow-sm ${className}`}
-      style={{
-        aspectRatio: "16/9",
-        containerType: "inline-size",
-        /* 슬라이드 밖으로 텍스트·도형이 삐져나가지 않게 (PPT 캔버스와 동일) */
-        overflow: "hidden",
-      }}
+      className={`relative ${h0WhenPb}min-w-0 w-full max-w-full rounded-md border border-zinc-200 bg-white shadow-sm ${className}`}
+      style={canvasBoxStyle}
     >
       {ordered.map((el, index) => {
         const isImage = el.type === "image";

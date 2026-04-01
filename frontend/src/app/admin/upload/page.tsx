@@ -1,7 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { SlideViewer } from "@/components/SlideViewer";
+import { slideCanvasPaddingBottomPercent } from "@/lib/slideCanvasAspect";
 import type { ParsePptxResponse, SlideData } from "@/types/parse";
 
 /** Same-origin proxy → `src/app/api/parse-pptx/route.ts` (Network 탭에 `parse-pptx`로 보임). */
@@ -11,13 +20,20 @@ const PARSE_ENDPOINT = "/api/parse-pptx";
 function slideJsonForPreview(slide: SlideData): string {
   return JSON.stringify(
     slide,
-    (_key, value) => {
+    (key, value) => {
+      if (
+        key === "rasterPreview" &&
+        typeof value === "string" &&
+        value.startsWith("data:")
+      ) {
+        return `[슬라이드 전체 래스터(JPEG) 포함, 약 ${Math.round(value.length / 1024)} KB — 가운데 패널 하단 이미지 / 전체 JSON 다운로드]`;
+      }
       if (
         typeof value === "string" &&
         value.startsWith("data:") &&
         value.length > 120
       ) {
-        return `[data URL omitted, ${Math.round(value.length / 1024)} KB — download full JSON for blob]`;
+        return `[도형·이미지 data URL 축약, ${Math.round(value.length / 1024)} KB — 전체 JSON 다운로드]`;
       }
       return value;
     },
@@ -67,6 +83,11 @@ export default function AdminUploadPage() {
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState("");
   const titleEditedByUser = useRef(false);
+  const previewCardRef = useRef<HTMLDivElement>(null);
+  const [previewColumnHeightPx, setPreviewColumnHeightPx] = useState<
+    number | null
+  >(null);
+  const [isLgLayout, setIsLgLayout] = useState(false);
 
   const onFile = useCallback(
     async (file: File | null) => {
@@ -126,12 +147,71 @@ export default function AdminUploadPage() {
     [slides, slideNotes],
   );
   const fallbackTitleFromParser = data?.meta?.title ?? "";
+  const slideRasterMeta = data?.meta?.slideRaster;
+  const { slideAspectRatio, slideCanvasPaddingBottomPct } = useMemo(() => {
+    const emu = data?.meta?.slideSizeEmu;
+    const w = emu?.width;
+    const h = emu?.height;
+    const slideCanvasPaddingBottomPct = slideCanvasPaddingBottomPercent(emu);
+    if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
+      return {
+        slideAspectRatio: `${w} / ${h}`,
+        slideCanvasPaddingBottomPct,
+      };
+    }
+    return {
+      slideAspectRatio: "16 / 9",
+      slideCanvasPaddingBottomPct,
+    };
+  }, [data?.meta?.slideSizeEmu]);
 
   useEffect(() => {
     if (titleEditedByUser.current) return;
     const fromNotes = deriveTitleFromSlideNotes(slides, slideNotes);
     setTitle(fromNotes || fallbackTitleFromParser);
   }, [slides, slideNotes, fallbackTitleFromParser]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsLgLayout(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!hasParsedData || !current) {
+      setPreviewColumnHeightPx(null);
+      return;
+    }
+    const el = previewCardRef.current;
+    if (!el) return;
+    const measure = () => {
+      const h = el.getBoundingClientRect().height;
+      if (h > 0) setPreviewColumnHeightPx(Math.round(h));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [
+    hasParsedData,
+    current,
+    slideIndex,
+    data,
+    slideCanvasPaddingBottomPct,
+    slideAspectRatio,
+  ]);
+
+  const sideCardHeightStyle: CSSProperties | undefined =
+    isLgLayout && previewColumnHeightPx != null
+      ? { height: previewColumnHeightPx, minHeight: 0 }
+      : undefined;
+
+  const sideCardHeightClass =
+    isLgLayout && previewColumnHeightPx != null
+      ? ""
+      : "max-h-[calc(100vh-6rem)]";
 
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-8">
@@ -172,6 +252,65 @@ export default function AdminUploadPage() {
         ) : null}
       </div>
 
+      {hasParsedData ? (
+        <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+          <span className="font-medium text-zinc-800">슬라이드 래스터</span>
+          {data?.meta?.slideRaster ? (
+            <>
+              {": "}
+              <code className="rounded bg-white px-1 text-xs">
+                {data.meta.slideRaster.status}
+              </code>
+              {typeof data.meta.slideRaster.slidesRendered === "number" ? (
+                <span className="text-zinc-600">
+                  {" "}
+                  ({data.meta.slideRaster.slidesRendered}/{slides.length}장 JPEG)
+                </span>
+              ) : null}
+              {data.meta.slideRaster.reason ? (
+                <span className="mt-1 block text-xs text-zinc-600">
+                  {data.meta.slideRaster.reason}
+                </span>
+              ) : null}
+              {data.meta.slideRaster.missingFonts?.length ? (
+                <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-900">
+                  <strong>래스터 텍스트 누락 원인 — 미설치 폰트 감지됨</strong>
+                  <div className="mt-1 font-mono">
+                    {data.meta.slideRaster.missingFonts.join(", ")}
+                  </div>
+                  <div className="mt-1 text-red-700">
+                    {data.meta.slideRaster.missingFontHint}
+                  </div>
+                </div>
+              ) : data.meta.slideRaster.pptxFonts?.length ? (
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-xs text-zinc-500">
+                    사용된 폰트 {data.meta.slideRaster.pptxFonts.length}종 (모두 시스템에 있음)
+                  </summary>
+                  <div className="mt-0.5 font-mono text-[11px] text-zinc-600">
+                    {data.meta.slideRaster.pptxFonts.join(", ")}
+                  </div>
+                </details>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-amber-800">
+              {" "}
+              meta.slideRaster 없음 — parser-api를 최신 코드로 띄웠는지,{" "}
+              <code className="rounded bg-amber-100 px-1">pip install -r requirements.txt</code>{" "}
+              후 재시작했는지 확인하세요.
+            </span>
+          )}
+          <span className="mt-1 block text-xs text-zinc-500">
+            우측 JSON의{" "}
+            <code className="rounded bg-zinc-200 px-0.5">elements[].src</code>는
+            용량 때문에 축약 표시됩니다. 슬라이드 통째 이미지는{" "}
+            <code className="rounded bg-zinc-200 px-0.5">rasterPreview</code> 필드(동일
+            축약)와 가운데 하단 미리보기입니다.
+          </span>
+        </div>
+      ) : null}
+
       {error ? (
         <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
@@ -202,10 +341,14 @@ export default function AdminUploadPage() {
       ) : null}
 
       {hasParsedData ? (
-        <div className="mt-8 lg:min-h-0 lg:h-[min(40rem,calc(100vh-10rem))]">
-          <div className="grid h-full min-h-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,17.5rem)_minmax(0,1fr)_minmax(0,22rem)] lg:items-stretch">
+        <div className="mt-8">
+          {/* lg: 가운데 미리보기 높이(px)를 ResizeObserver로 재서 양옆 카드에 동일 적용 · JSON은 패널 내부 스크롤 */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,17.5rem)_minmax(0,1fr)_minmax(0,22rem)] lg:items-stretch">
           {/* lg: 메타 고정폭 · 미리보기가 남는 폭 전부 · JSON 고정폭(내부 스크롤). minmax(0,…)로 긴 JSON이 가운데 열을 압축하지 않게 함 */}
-          <aside className="order-2 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:order-1">
+          <aside
+            className={`order-2 flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:order-1 ${sideCardHeightClass}`}
+            style={sideCardHeightStyle}
+          >
             <h2 className="shrink-0 text-sm font-medium text-zinc-800">
               Metadata (draft)
             </h2>
@@ -306,9 +449,12 @@ export default function AdminUploadPage() {
             </div>
           </aside>
 
-          <div className="order-1 flex h-full min-h-0 min-w-0 lg:order-2">
+          <div className="order-1 flex h-full min-h-0 w-full min-w-0 items-start lg:order-2">
             {current ? (
-              <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50/80 p-4 shadow-sm">
+              <div
+                ref={previewCardRef}
+                className="flex w-full min-w-0 flex-col overflow-x-hidden rounded-xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50/80 p-4 shadow-sm"
+              >
                 <p className="mb-3 shrink-0 text-center text-xs text-zinc-500">
                   슬라이드 {current.slideNumber} — 추출된 도형{" "}
                   {(current.elements ?? []).length}개
@@ -320,6 +466,8 @@ export default function AdminUploadPage() {
                   <SlideViewer
                     elements={current.elements ?? []}
                     className="mx-auto w-full max-w-full"
+                    aspectRatio={slideAspectRatio}
+                    canvasPaddingBottomPercent={slideCanvasPaddingBottomPct}
                   />
                 </div>
                 <nav
@@ -380,14 +528,74 @@ export default function AdminUploadPage() {
                     </svg>
                   </button>
                 </nav>
-                <div className="min-h-0 flex-1" aria-hidden="true" />
+                {current.rasterPreview ? (
+                  /* block 레이아웃: flex-col 자식 + absolute만 있으면 min-height:auto가 0으로 잡혀 padding 박스가 납작해짐 */
+                  <div className="mt-4 min-w-0 shrink-0 space-y-1.5">
+                    <p className="text-center text-[11px] text-zinc-500">
+                      슬라이드 래스터 미리보기 (PPT→PDF→이미지, JSON 퍼센트 좌표와 동일 비율)
+                    </p>
+                    <div
+                      className="relative isolate h-0 w-full min-w-0 max-w-full overflow-hidden rounded-md border border-zinc-200 bg-black shadow-inner"
+                      style={{
+                        paddingBottom: `${slideCanvasPaddingBottomPct}%`,
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- parser data URL; absolute so intrinsic JPEG size cannot expand the box */}
+                      <img
+                        src={current.rasterPreview}
+                        alt=""
+                        className="absolute inset-0 box-border h-full w-full max-h-full max-w-full object-contain object-center"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="min-h-0 flex-1" aria-hidden="true" />
+                )}
+                {slideRasterMeta?.status === "ok" && !current.rasterPreview ? (
+                  <p className="mt-2 shrink-0 text-center text-[11px] text-amber-800">
+                    이 슬라이드에 rasterPreview가 없습니다. (해당 페이지 렌더 실패 또는 응답
+                    불완전 가능)
+                  </p>
+                ) : null}
+                {slideRasterMeta &&
+                slideRasterMeta.status &&
+                slideRasterMeta.status !== "ok" ? (
+                  <p
+                    className={`mt-3 shrink-0 rounded border px-2 py-1.5 text-center text-[11px] ${
+                      slideRasterMeta.status === "error"
+                        ? "border-red-200 bg-red-50 text-red-900"
+                        : slideRasterMeta.status === "disabled"
+                          ? "border-zinc-200 bg-zinc-50 text-zinc-600"
+                          : "border-amber-200 bg-amber-50 text-amber-950"
+                    }`}
+                  >
+                    래스터 {slideRasterMeta.status}:{" "}
+                    {slideRasterMeta.reason || "(사유 없음)"}
+                    {slideRasterMeta.renderErrorsSample?.length ? (
+                      <span className="mt-1 block font-mono text-[10px] opacity-90">
+                        {slideRasterMeta.renderErrorsSample.join(" | ")}
+                      </span>
+                    ) : null}
+                  </p>
+                ) : null}
+                {slideRasterMeta?.status === "ok" &&
+                slideRasterMeta.pageCountMismatch ? (
+                  <p className="mt-2 shrink-0 text-center text-[11px] text-amber-800">
+                    PDF 페이지 수와 슬라이드 수 불일치: PDF{" "}
+                    {slideRasterMeta.pageCountMismatch.pdfPages}장 / PPTX{" "}
+                    {slideRasterMeta.pageCountMismatch.pptxSlides}장
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
 
-          <aside className="order-3 flex h-full min-h-0 min-w-0 lg:order-3 lg:sticky lg:top-4">
+          <aside
+            className={`order-3 flex min-h-0 w-full min-w-0 flex-col overflow-hidden lg:order-3 lg:sticky lg:top-4 ${sideCardHeightClass}`}
+            style={sideCardHeightStyle}
+          >
             {current ? (
-              <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+              <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
                 <div className="shrink-0 border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-medium text-zinc-800">
                   현재 슬라이드 JSON (미리보기 · data URL 축약)
                 </div>

@@ -21,8 +21,27 @@ export type SlideData = {
   slideNumber: number;
   elements: SlideElement[];
   plainText?: string;
+  /** LibreOffice+PyMuPDF JPEG data URL (승인 전 미리보기·AI 시각 근거) */
+  rasterPreview?: string;
   /** parser-api: ZIP/추출 진단(백엔드 버전 확인용) */
   extractStats?: Record<string, unknown>;
+};
+
+export type SlideRasterMeta = {
+  enabled?: boolean;
+  status?: string;
+  reason?: string;
+  longEdgePx?: number;
+  jpegQuality?: number;
+  slidesRendered?: number;
+  pdfPageCount?: number;
+  pageCountMismatch?: { pdfPages: number; pptxSlides: number };
+  renderErrorsSample?: string[];
+  /** PPTX 파일에서 추출한 폰트 목록 */
+  pptxFonts?: string[];
+  /** 시스템에 설치되지 않은 폰트 (래스터 텍스트 누락 주요 원인) */
+  missingFonts?: string[];
+  missingFontHint?: string;
 };
 
 export type ParseMeta = {
@@ -31,6 +50,9 @@ export type ParseMeta = {
   tags: string[];
   /** 이 필드가 없으면 Next가 연결한 FastAPI가 이 저장소 parser-api가 아닐 수 있음 */
   parserApiBuild?: string;
+  /** python-pptx 슬라이드 크기(EMU), 래스터와 동일 종횡비 정합 */
+  slideSizeEmu?: { width: number; height: number };
+  slideRaster?: SlideRasterMeta;
 };
 
 export type ParsePptxResponse = {

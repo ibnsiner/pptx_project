@@ -17,9 +17,11 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.oxml.ns import qn
 from pptx.shapes.group import GroupShape
 
+from app.slide_raster import render_slide_rasters_jpeg
+
 app = FastAPI(title="PPTX Parser API")
 
-PARSER_API_BUILD = "2026-03-30-zip2"
+PARSER_API_BUILD = "2026-03-31-slide-raster3"
 
 app.add_middleware(
     CORSMiddleware,
@@ -1327,6 +1329,10 @@ def parse_presentation(content: bytes) -> dict[str, Any]:
             "description": "",
             "tags": top_tags,
             "parserApiBuild": PARSER_API_BUILD,
+            "slideSizeEmu": {
+                "width": int(prs.slide_width),
+                "height": int(prs.slide_height),
+            },
         },
     }
 
@@ -1340,6 +1346,13 @@ async def parse_pptx(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Empty file")
     try:
         payload = parse_presentation(content)
+        slides = payload.get("slides") or []
+        raster_urls, raster_meta = render_slide_rasters_jpeg(content, len(slides))
+        for slide_dict, url in zip(slides, raster_urls):
+            if url:
+                slide_dict["rasterPreview"] = url
+        meta = payload.setdefault("meta", {})
+        meta["slideRaster"] = raster_meta
         return JSONResponse(
             content=payload,
             headers={"X-PPTX-Parser-Build": PARSER_API_BUILD},

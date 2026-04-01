@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+/** LibreOffice PDF 변환·다수 슬라이드 JPEG 포함 시 응답이 커질 수 있음 */
+export const maxDuration = 300;
 
 function parserBaseUrl(): string {
   const raw =
@@ -36,6 +38,7 @@ export async function POST(request: NextRequest) {
     const upstream = await fetch(`${base}/api/parse-pptx`, {
       method: "POST",
       body: formData,
+      signal: AbortSignal.timeout(280_000),
     });
     const body = await upstream.text();
     const outHeaders = new Headers();
