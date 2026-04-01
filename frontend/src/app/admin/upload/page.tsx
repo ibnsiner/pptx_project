@@ -83,6 +83,7 @@ export default function AdminUploadPage() {
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState("");
   const titleEditedByUser = useRef(false);
+  const [descModalOpen, setDescModalOpen] = useState(false);
   const previewCardRef = useRef<HTMLDivElement>(null);
   const [previewColumnHeightPx, setPreviewColumnHeightPx] = useState<
     number | null
@@ -214,6 +215,7 @@ export default function AdminUploadPage() {
       : "max-h-[calc(100vh-6rem)]";
 
   return (
+    <>
     <main className="min-h-screen bg-zinc-50">
       {/* 상단 헤더 */}
       <div className="border-b border-zinc-200 bg-white">
@@ -410,9 +412,20 @@ export default function AdminUploadPage() {
               ) : null}
 
               <div>
-                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-                  Description <span className="normal-case font-normal text-zinc-300">(자동 합본)</span>
-                </label>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                    Description <span className="normal-case font-normal text-zinc-300">(자동 합본)</span>
+                  </label>
+                  {descriptionFromSlides ? (
+                    <button
+                      type="button"
+                      onClick={() => setDescModalOpen(true)}
+                      className="text-[11px] font-medium text-zinc-400 underline-offset-2 hover:text-zinc-600 hover:underline"
+                    >
+                      전체 보기
+                    </button>
+                  ) : null}
+                </div>
                 <textarea
                   readOnly
                   value={descriptionFromSlides}
@@ -636,5 +649,74 @@ export default function AdminUploadPage() {
       ) : null}
       </div>
     </main>
+
+    {/* Description 전체 보기 모달 */}
+    
+    {descModalOpen ? (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+        onClick={() => setDescModalOpen(false)}
+      >
+        <div
+          className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* 모달 헤더 */}
+          <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-6 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900">Description 전체 보기</h2>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                {slides.filter((s) => (slideNotes[s.slideNumber] ?? "").trim()).length}개 슬라이드 설명 합본
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDescModalOpen(false)}
+              aria-label="닫기"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 슬라이드별 설명 목록 */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 space-y-5">
+            {slides.map((s) => {
+              const note = (slideNotes[s.slideNumber] ?? "").trim();
+              if (!note) return null;
+              return (
+                <div key={s.slideNumber} className="flex gap-4">
+                  <div className="shrink-0">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-[11px] font-semibold tabular-nums text-zinc-500">
+                      {s.slideNumber}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{note}</p>
+                  </div>
+                </div>
+              );
+            })}
+            {!descriptionFromSlides ? (
+              <p className="text-center text-sm text-zinc-400">작성된 슬라이드 설명이 없습니다.</p>
+            ) : null}
+          </div>
+
+          {/* 모달 푸터 */}
+          <div className="shrink-0 border-t border-zinc-100 px-6 py-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setDescModalOpen(false)}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white transition hover:bg-zinc-700"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }

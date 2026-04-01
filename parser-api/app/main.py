@@ -22,7 +22,7 @@ from app.slide_raster_ppt import render_slide_rasters_ppt
 
 app = FastAPI(title="PPTX Parser API")
 
-PARSER_API_BUILD = "2026-04-01-text-style2"
+PARSER_API_BUILD = "2026-04-01-text-style3"
 
 app.add_middleware(
     CORSMiddleware,
@@ -473,7 +473,26 @@ def _extract_text_style(shape: Any, slide_w: int) -> dict[str, Any]:
                                 if algn in am:
                                     style["textAlign"] = am[algn]
 
-        # 1. 슬라이드 도형 자체
+        # 1-A. 표(Table) 도형: 첫 번째 셀의 text_frame에서 대표 스타일 추출
+        if getattr(shape, "has_table", False):
+            try:
+                for row in shape.table.rows:
+                    for cell in row.cells:
+                        cell_tf = getattr(cell, "text_frame", None)
+                        if cell_tf is None:
+                            continue
+                        cell_txBody = getattr(cell_tf, "_txBody", None) or getattr(cell_tf, "_element", None)
+                        if cell_txBody is not None:
+                            _scan_txbody(cell_txBody)
+                        if len(style) >= 3:
+                            break
+                    if len(style) >= 3:
+                        break
+            except Exception:
+                pass
+            return style
+
+        # 1-B. 일반 도형 / 플레이스홀더
         tf = getattr(shape, "text_frame", None)
         if tf is None:
             return style
@@ -698,6 +717,86 @@ def _collect_existing_text_keys(elements: list[dict[str, Any]]) -> set[str]:
     return keys
 
 
+def _extract_text_style_from_tbl_xml(tbl_elm: Any, slide_w: int) -> dict[str, Any]:
+    """
+    <a:tbl> XML 엘리먼트에서 첫 번째 셀의 대표 스타일을 추출한다.
+    표는 shape 객체가 없어 직접 XML 탐색이 필요하다.
+    """
+    style: dict[str, Any] = {}
+    if tbl_elm is None or slide_w <= 0:
+        return style
+    try:
+        slide_w_pt = float(slide_w) / 12700.0
+        NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+        def _tag(local: str) -> str:
+            return f"{{{NS_A}}}{local}"
+
+        def _parse_rpr_xml(rpr: Any) -> dict[str, Any]:
+            out: dict[str, Any] = {}
+            if rpr is None:
+                return out
+            b = rpr.get("b")
+            if b is not None:
+                out["bold"] = b not in ("0", "false")
+            i = rpr.get("i")
+            if i is not None:
+                out["italic"] = i not in ("0", "false")
+            sz = rpr.get("sz")
+            if sz:
+                try:
+                    cqw = min(max((int(sz) * 0.01 / slide_w_pt) * 100.0, 0.4), 14.0)
+                    out["fontSize"] = f"{cqw:.4f}cqw"
+                except (ValueError, ZeroDivisionError):
+                    pass
+            for tag in (_tag("latin"), _tag("ea")):
+                node = rpr.find(tag)
+                if node is not None:
+                    tf = node.get("typeface", "")
+                    if tf and not tf.startswith("+"):
+                        out["fontFamily"] = tf
+                        break
+            solid = rpr.find(_tag("solidFill"))
+            if solid is not None:
+                srgb = solid.find(_tag("srgbClr"))
+                if srgb is not None:
+                    val = srgb.get("val", "")
+                    if len(val) == 6:
+                        out["color"] = f"#{val.lower()}"
+            return out
+
+        # <a:tbl> → <a:tr> → <a:tc> → <a:txBody> → <a:p>
+        tbl = tbl_elm.find(f"{{{NS_A}}}tbl") if tbl_elm.tag != f"{{{NS_A}}}tbl" else tbl_elm
+        if tbl is None:
+            return style
+        for tr in tbl.findall(_tag("tr")):
+            for tc in tr.findall(_tag("tc")):
+                txBody = tc.find(_tag("txBody"))
+                if txBody is None:
+                    continue
+                for p in txBody.findall(_tag("p")):
+                    if "textAlign" not in style:
+                        pPr = p.find(_tag("pPr"))
+                        if pPr is not None:
+                            algn = pPr.get("algn")
+                            am = {"l": "left", "ctr": "center", "r": "right", "just": "justify"}
+                            if algn in am:
+                                style["textAlign"] = am[algn]
+                    for r in p.findall(_tag("r")):
+                        rpr = r.find(_tag("rPr"))
+                        if rpr is not None:
+                            for k, v in _parse_rpr_xml(rpr).items():
+                                if k not in style:
+                                    style[k] = v
+                    if len(style) >= 4:
+                        return style
+                if len(style) >= 4:
+                    return style
+    except Exception:
+        pass
+    return style
+
+
 def _enrich_tables_from_slide_oxml(
     slide_elm: Any,
     slide_w: int,
@@ -728,16 +827,22 @@ def _enrich_tables_from_slide_oxml(
             abs_l, abs_t = 0, 0
             w_emu = max(slide_w // 2, 1)
             h_emu = max(slide_h // 8, 1)
+
+        # 표 셀 스타일 추출 (XML 직접 탐색)
+        tbl_style = _extract_text_style_from_tbl_xml(gf, slide_w)
+
+        cell_style: dict[str, Any] = {
+            "left": _pct(abs_l, slide_w),
+            "top": _pct(abs_t, slide_h),
+            "width": _pct(w_emu, slide_w),
+            "height": _pct(h_emu, slide_h),
+        }
+        cell_style.update(tbl_style)
         elements.append(
             {
                 "type": "text",
                 "content": t,
-                "style": {
-                    "left": _pct(abs_l, slide_w),
-                    "top": _pct(abs_t, slide_h),
-                    "width": _pct(w_emu, slide_w),
-                    "height": _pct(h_emu, slide_h),
-                },
+                "style": cell_style,
             }
         )
 
