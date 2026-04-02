@@ -602,7 +602,7 @@ export default function AdminUploadPage() {
                       aria-label="슬라이드 JSON 복사"
                       onClick={() => {
                         void navigator.clipboard
-                          .writeText(JSON.stringify(current, null, 2))
+                          .writeText(slideJsonForPreview(current))
                           .then(() => {
                             setJsonCopied(true);
                             setTimeout(() => setJsonCopied(false), 2000);

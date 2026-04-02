@@ -3,6 +3,7 @@ export type SlideElementStyle = {
   top: string;
   width: string;
   height: string;
+  // text
   fontSize?: string;
   color?: string;
   bold?: boolean;
@@ -10,12 +11,27 @@ export type SlideElementStyle = {
   underline?: boolean;
   fontFamily?: string;
   textAlign?: "left" | "center" | "right" | "justify";
+  // shape (filled shape / connector line)
+  fillColor?: string;
+  fillOpacity?: string;
+  borderRadius?: string;
+  strokeColor?: string;
+  isLine?: boolean;
+  clipPath?: string;
 };
 
+export type ParagraphStyle = Partial<Pick<SlideElementStyle,
+  "color" | "bold" | "italic" | "underline" | "fontSize" | "fontFamily" | "textAlign"
+>>;
+
 export type SlideElement = {
-  type: "text" | "image";
+  type: "text" | "image" | "shape" | "table";
   content?: string;
   src?: string;
+  /** 단락별 스타일 배열. \n으로 구분된 단락과 1:1 대응, 빈 단락은 {} */
+  paragraphStyles?: ParagraphStyle[];
+  /** 표 데이터: rows[행][열] = 셀 텍스트 */
+  rows?: string[][];
   /** parser-api: 인라인 한도 초과 등 */
   skipReason?: string;
   byteLength?: number;

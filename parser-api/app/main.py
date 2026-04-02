@@ -22,7 +22,7 @@ from app.slide_raster_ppt import render_slide_rasters_ppt
 
 app = FastAPI(title="PPTX Parser API")
 
-PARSER_API_BUILD = "2026-04-01-text-style3"
+PARSER_API_BUILD = "2026-04-01-table-element"
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,30 +46,124 @@ def _shape_type_safe(shape: Any) -> Any:
         return None
 
 
+def _get_grp_transform(grp_shape: Any) -> tuple[int, int, float, float, int, int]:
+    """
+    그룹 도형의 좌표 변환 파라미터를 반환한다.
+    Returns (off_x, off_y, scale_x, scale_y, ch_off_x, ch_off_y)
+
+    PPTX 그룹 내부 좌표(chOff/chExt 기준)를 슬라이드 절대 EMU로 변환하려면:
+      slide_x = off_x + (child_x - ch_off_x) * scale_x
+      slide_y = off_y + (child_y - ch_off_y) * scale_y
+    """
+    try:
+        elm = grp_shape.element
+        NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+        NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+        grp_sp_pr = elm.find(f"{{{NS_P}}}grpSpPr")
+        if grp_sp_pr is None:
+            # drawingml 네임스페이스 fallback
+            grp_sp_pr = elm.find(f"{{{NS_A}}}grpSpPr")
+        if grp_sp_pr is None:
+            for c in elm:
+                if c.tag.endswith("}grpSpPr"):
+                    grp_sp_pr = c
+                    break
+
+        if grp_sp_pr is None:
+            raise ValueError("no grpSpPr")
+
+        xfrm = None
+        for c in grp_sp_pr:
+            if c.tag.endswith("}xfrm"):
+                xfrm = c
+                break
+        if xfrm is None:
+            raise ValueError("no xfrm")
+
+        off = xfrm.find(f"{{{NS_A}}}off")
+        ext = xfrm.find(f"{{{NS_A}}}ext")
+        ch_off = xfrm.find(f"{{{NS_A}}}chOff")
+        ch_ext = xfrm.find(f"{{{NS_A}}}chExt")
+
+        off_x = int(off.get("x", 0)) if off is not None else 0
+        off_y = int(off.get("y", 0)) if off is not None else 0
+        ext_cx = int(ext.get("cx", 1)) if ext is not None else 1
+        ext_cy = int(ext.get("cy", 1)) if ext is not None else 1
+        ch_off_x = int(ch_off.get("x", 0)) if ch_off is not None else 0
+        ch_off_y = int(ch_off.get("y", 0)) if ch_off is not None else 0
+        ch_ext_cx = int(ch_ext.get("cx", ext_cx)) if ch_ext is not None else ext_cx
+        ch_ext_cy = int(ch_ext.get("cy", ext_cy)) if ch_ext is not None else ext_cy
+
+        scale_x = ext_cx / ch_ext_cx if ch_ext_cx != 0 else 1.0
+        scale_y = ext_cy / ch_ext_cy if ch_ext_cy != 0 else 1.0
+        return off_x, off_y, scale_x, scale_y, ch_off_x, ch_off_y
+    except Exception:
+        # 실패 시 단순 오프셋 방식 폴백
+        gl = int(getattr(grp_shape, "left", 0) or 0)
+        gt = int(getattr(grp_shape, "top", 0) or 0)
+        return gl, gt, 1.0, 1.0, 0, 0
+
+
 def _iter_shapes_placed(
     shapes: Any,
-    offset_left: int = 0,
-    offset_top: int = 0,
+    off_x: int = 0,
+    off_y: int = 0,
+    scale_x: float = 1.0,
+    scale_y: float = 1.0,
+    ch_off_x: int = 0,
+    ch_off_y: int = 0,
 ) -> Any:
     """
-    Yield (shape, slide_offset_left, slide_offset_top).
-    Child shapes inside a Group have left/top relative to the group origin;
-    offsets must be accumulated so HTML % positions match PowerPoint.
+    Yield (shape, abs_slide_left_emu, abs_slide_top_emu).
+
+    그룹 도형은 chOff/chExt 기반 좌표 변환을 적용해
+    자식 도형의 위치를 슬라이드 절대 EMU로 변환한다.
     """
     for shape in shapes:
         st = _shape_type_safe(shape)
-        if st == MSO_SHAPE_TYPE.GROUP:
+        if st == MSO_SHAPE_TYPE.GROUP or isinstance(shape, GroupShape):
+            g_off_x, g_off_y, g_sx, g_sy, g_ch_x, g_ch_y = _get_grp_transform(shape)
+            # 이 그룹의 슬라이드 절대 위치 (부모 변환 적용)
+            child_raw_x = int(getattr(shape, "left", 0) or 0)
+            child_raw_y = int(getattr(shape, "top", 0) or 0)
+            slide_g_x = off_x + (child_raw_x - ch_off_x) * scale_x
+            slide_g_y = off_y + (child_raw_y - ch_off_y) * scale_y
+
+            # 하위 그룹 변환: 이 그룹의 ext/chExt 비율로 스케일 계산
+            try:
+                g_ext_cx = int(getattr(shape, "width", 1) or 1)
+                g_ext_cy = int(getattr(shape, "height", 1) or 1)
+            except Exception:
+                g_ext_cx, g_ext_cy = 1, 1
+            g_new_sx = scale_x * (g_ext_cx / g_ch_y if g_ch_y else 1.0)
+            # grpSpPr에서 직접 chExt 읽기
+            try:
+                _, _, grp_sx2, grp_sy2, grp_chx2, grp_chy2 = _get_grp_transform(shape)
+                new_sx = grp_sx2
+                new_sy = grp_sy2
+                new_chx = grp_chx2
+                new_chy = grp_chy2
+                new_ox = g_off_x
+                new_oy = g_off_y
+            except Exception:
+                new_ox, new_oy = int(slide_g_x), int(slide_g_y)
+                new_sx, new_sy = scale_x, scale_y
+                new_chx, new_chy = ch_off_x, ch_off_y
+
             inner = getattr(shape, "shapes", None)
-            gl = int(getattr(shape, "left", 0) or 0)
-            gt = int(getattr(shape, "top", 0) or 0)
-            nl = offset_left + gl
-            nt = offset_top + gt
             if inner is not None:
-                yield from _iter_shapes_placed(inner, nl, nt)
-            elif isinstance(shape, GroupShape):
-                yield from _iter_shapes_placed(shape.shapes, nl, nt)
+                yield from _iter_shapes_placed(inner, new_ox, new_oy, new_sx, new_sy, new_chx, new_chy)
         else:
-            yield shape, offset_left, offset_top
+            # 현재 변환 적용해 슬라이드 절대 EMU 계산
+            try:
+                raw_x = int(shape.left or 0)
+                raw_y = int(shape.top or 0)
+            except Exception:
+                raw_x, raw_y = 0, 0
+            abs_x = off_x + (raw_x - ch_off_x) * scale_x
+            abs_y = off_y + (raw_y - ch_off_y) * scale_y
+            yield shape, int(abs_x), int(abs_y)
 
 
 def _is_placeholder_shape(shape: Any) -> bool:
@@ -115,9 +209,9 @@ def _iter_shapes_paint_order(slide: Any) -> Any:
         return
 
     for tree in (master.shapes, layout.shapes):
-        for shape, gl, gt in _iter_shapes_placed(tree):
+        for shape, abs_x, abs_y in _iter_shapes_placed(tree):
             if not _should_skip_master_layout_shape(shape):
-                yield shape, gl, gt
+                yield shape, abs_x, abs_y
 
     yield from _iter_shapes_placed(slide.shapes)
 
@@ -357,6 +451,82 @@ def _xml_attr_first(elm: Any, *attr_names: str) -> str | None:
         if v is not None:
             return v
     return None
+
+
+def _extract_paragraph_styles(shape: Any, slide_w: int) -> list[dict[str, Any]]:
+    """
+    TextFrame의 각 단락(paragraph)별 스타일을 리스트로 반환한다.
+    단락 사이 빈 줄 포함, 각 단락의 첫 런 스타일을 대표로 사용한다.
+    빈 단락은 빈 딕셔너리로 표시.
+    """
+    result: list[dict[str, Any]] = []
+    try:
+        tf = getattr(shape, "text_frame", None)
+        if tf is None:
+            return result
+        for para in tf.paragraphs:
+            # 단락 텍스트
+            try:
+                para_text = para.text or ""
+            except Exception:
+                para_text = ""
+            if not para_text.strip():
+                result.append({})
+                continue
+            # 단락 스타일: _scan_txbody 대신 직접 rPr 탐색
+            para_style: dict[str, Any] = {}
+            slide_w_pt = float(slide_w) / 12700.0
+            NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+            def _tag(local: str) -> str:
+                return f"{{{NS_A}}}{local}"
+            try:
+                p_elm = para._p
+                # textAlign
+                pPr = p_elm.find(_tag("pPr"))
+                if pPr is not None:
+                    algn = pPr.get("algn")
+                    am = {"l": "left", "ctr": "center", "r": "right", "just": "justify"}
+                    if algn in am:
+                        para_style["textAlign"] = am[algn]
+                # 런 스타일
+                for r_elm in p_elm.findall(_tag("r")):
+                    rpr = r_elm.find(_tag("rPr"))
+                    if rpr is None:
+                        continue
+                    b = rpr.get("b")
+                    if b is not None and "bold" not in para_style:
+                        para_style["bold"] = b not in ("0", "false")
+                    i = rpr.get("i")
+                    if i is not None and "italic" not in para_style:
+                        para_style["italic"] = i not in ("0", "false")
+                    sz = rpr.get("sz")
+                    if sz and "fontSize" not in para_style and slide_w_pt > 0:
+                        try:
+                            cqw = min(max((int(sz) * 0.01 / slide_w_pt) * 100.0, 0.4), 14.0)
+                            para_style["fontSize"] = f"{cqw:.4f}cqw"
+                        except Exception:
+                            pass
+                    solid = rpr.find(_tag("solidFill"))
+                    if solid is not None and "color" not in para_style:
+                        srgb = solid.find(_tag("srgbClr"))
+                        if srgb is not None:
+                            val = srgb.get("val", "")
+                            if len(val) == 6:
+                                para_style["color"] = f"#{val.lower()}"
+                    for ftag in (_tag("latin"), _tag("ea")):
+                        node = rpr.find(ftag)
+                        if node is not None and "fontFamily" not in para_style:
+                            tf2 = node.get("typeface", "")
+                            if tf2 and not tf2.startswith("+"):
+                                para_style["fontFamily"] = tf2
+                    if len(para_style) >= 5:
+                        break
+            except Exception:
+                pass
+            result.append(para_style)
+    except Exception:
+        pass
+    return result
 
 
 def _extract_text_style(shape: Any, slide_w: int) -> dict[str, Any]:
@@ -715,6 +885,503 @@ def _collect_existing_text_keys(elements: list[dict[str, Any]]) -> set[str]:
             keys.add(_normalized_text_block(c))
             keys.add(c)
     return keys
+
+
+def _get_theme_elm(shape: Any) -> Any:
+    """
+    shape가 슬라이드·레이아웃·마스터 어느 파트에 속해 있어도
+    해당 슬라이드 마스터의 theme XML 엘리먼트를 반환한다.
+    실패 시 None.
+    """
+    THEME_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme"
+    candidates = []
+    try:
+        part = shape.part
+        candidates.append(part)
+        # slide → layout → master
+        for getter in ("slide", "slide_layout"):
+            try:
+                part = getattr(part, getter, None) or getattr(part, getter.replace("_", "") if "_" in getter else getter, None)
+                if part is None:
+                    break
+                candidates.append(part)
+            except Exception:
+                break
+    except Exception:
+        pass
+
+    # 여러 경로로 master까지 올라가며 theme rel 시도
+    try:
+        # 직접 경로: shape.part.slide.slide_layout.slide_master.part
+        master_part = shape.part.slide.slide_layout.slide_master.part
+        return master_part.part_related_by(THEME_REL)._element
+    except Exception:
+        pass
+    try:
+        # layout 경로
+        master_part = shape.part.slide_layout.slide_master.part
+        return master_part.part_related_by(THEME_REL)._element
+    except Exception:
+        pass
+    try:
+        # shape.part 자체가 master part인 경우
+        return shape.part.part_related_by(THEME_REL)._element
+    except Exception:
+        pass
+    try:
+        # shape.part.slide_master (layout shape)
+        master_part = shape.part.slide_master.part
+        return master_part.part_related_by(THEME_REL)._element
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_scheme_color(scheme_name: str, theme_elm: Any, NS_A: str) -> str | None:
+    """
+    테마 XML에서 schemeClr 이름(예: accent1, dk1 등)을 실제 RGB hex로 변환한다.
+    theme_elm: pptx의 theme1.xml 루트 엘리먼트 (없으면 None)
+    """
+    if theme_elm is None:
+        return None
+
+    def _tag(local: str) -> str:
+        return f"{{{NS_A}}}{local}"
+
+    NS_THM = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+    # themeElements/clrScheme 탐색
+    theme_elems = None
+    for child in theme_elm:
+        if child.tag.endswith("}themeElements"):
+            theme_elems = child
+            break
+    if theme_elems is None:
+        return None
+    clr_scheme = None
+    for child in theme_elems:
+        if child.tag.endswith("}clrScheme"):
+            clr_scheme = child
+            break
+    if clr_scheme is None:
+        return None
+
+    # scheme_name → 엘리먼트 이름 매핑
+    name_map = {
+        "dk1": "dk1", "lt1": "lt1", "dk2": "dk2", "lt2": "lt2",
+        "accent1": "accent1", "accent2": "accent2", "accent3": "accent3",
+        "accent4": "accent4", "accent5": "accent5", "accent6": "accent6",
+        "hlink": "hlink", "folHlink": "folHlink",
+    }
+    target = name_map.get(scheme_name)
+    if not target:
+        return None
+
+    for clr_elm in clr_scheme:
+        local = clr_elm.tag.split("}")[-1] if "}" in clr_elm.tag else clr_elm.tag
+        if local != target:
+            continue
+        for color_node in clr_elm:
+            local2 = color_node.tag.split("}")[-1]
+            if local2 == "srgbClr":
+                val = color_node.get("val", "")
+                if len(val) == 6:
+                    return f"#{val.lower()}"
+            elif local2 == "sysClr":
+                last_clr = color_node.get("lastClr", "")
+                if len(last_clr) == 6:
+                    return f"#{last_clr.lower()}"
+    return None
+
+
+def _extract_line_color_from_sppr(
+    sp_pr: Any, NS_A: str, theme_elm: Any = None
+) -> str | None:
+    """<a:spPr> 또는 <a:cxnSpPr>에서 선 색상을 추출한다."""
+    def _tag(local: str) -> str:
+        return f"{{{NS_A}}}{local}"
+    ln = sp_pr.find(_tag("ln"))
+    if ln is None:
+        return None
+    solid = ln.find(_tag("solidFill"))
+    if solid is None:
+        return None
+    srgb = solid.find(_tag("srgbClr"))
+    if srgb is not None:
+        val = srgb.get("val", "")
+        if len(val) == 6:
+            return f"#{val.lower()}"
+    # schemeClr: 테마 XML로 실제 색상 해석 시도
+    schm = solid.find(_tag("schemeClr"))
+    if schm is not None:
+        name = schm.get("val", "")
+        resolved = _resolve_scheme_color(name, theme_elm, NS_A)
+        if resolved:
+            return resolved
+        return f"scheme:{name}"
+    return None
+
+
+def _try_extract_connector_shape(
+    shape: Any,
+    abs_l: int,
+    abs_t: int,
+    slide_w: int,
+    slide_h: int,
+    elements: list[dict[str, Any]],
+    global_theme_elm: Any = None,
+) -> None:
+    """
+    <p:cxnSp> 연결선·화살표·장식선을 type:"shape"으로 추출한다.
+    HTML에서는 얇은 색상 막대로 렌더링한다.
+    """
+    try:
+        sp_elm = getattr(shape, "element", None)
+        if sp_elm is None:
+            return
+
+        NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+
+        def _tag_p(local: str) -> str:
+            return f"{{{NS_P}}}{local}"
+
+        # p:cxnSp 인지 확인
+        is_cxnSp = sp_elm.tag.endswith("}cxnSp") or sp_elm.tag == _tag_p("cxnSp")
+        if not is_cxnSp:
+            return
+
+        # 크기·위치
+        try:
+            w = shape.width
+            h = shape.height
+        except Exception:
+            return
+        if w <= 0 and h <= 0:
+            return
+
+        # cxnSpPr에서 선 색상 추출 (테마 XML 포함)
+        sp_pr = None
+        for child in sp_elm:
+            if child.tag.endswith("}cxnSpPr") or child.tag.endswith("}spPr"):
+                sp_pr = child
+                break
+        if sp_pr is None:
+            return
+
+        # 테마 XML 획득: ZIP 직접 추출 > part 체인
+        theme_elm = global_theme_elm or _get_theme_elm(shape)
+
+        line_color = _extract_line_color_from_sppr(sp_pr, NS_A, theme_elm)
+        if not line_color or line_color.startswith("scheme:"):
+            line_color = "#888888" if line_color else None
+        if not line_color:
+            return
+
+        # 가로/세로 방향에 따라 두께 결정
+        thickness = max(h, 1) if w > h else max(w, 1)
+        is_horizontal = w >= h
+
+        elements.append(
+            {
+                "type": "shape",
+                "style": {
+                    "left": _pct(abs_l, slide_w),
+                    "top": _pct(abs_t, slide_h),
+                    "width": _pct(w, slide_w) if not is_horizontal else _pct(w, slide_w),
+                    "height": _pct(h, slide_h),
+                    "fillColor": line_color,
+                    "fillOpacity": "1",
+                    "borderRadius": "0%",
+                    "isLine": True,
+                },
+            }
+        )
+    except Exception:
+        pass
+
+
+def _try_extract_filled_shape(
+    shape: Any,
+    abs_l: int,
+    abs_t: int,
+    slide_w: int,
+    slide_h: int,
+    elements: list[dict[str, Any]],
+    global_theme_elm: Any = None,
+) -> None:
+    """
+    텍스트 없는 채워진 도형(원, 사각형 등)을 type:"shape" 요소로 추출한다.
+    HTML 렌더링에서 CSS background-color + border-radius로 표현한다.
+
+    추출 조건: solidFill(단색) 또는 gradFill(그라데이션) 이 있는 p:sp 도형.
+    마스터/레이아웃 기본 도형(흰 배경, 투명)은 제외.
+    """
+    try:
+        # 이미지/표 도형 제외
+        if getattr(shape, "has_table", False):
+            return
+        sp_elm = getattr(shape, "element", None)
+        if sp_elm is None:
+            return
+
+        NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+
+        def _tag_a(local: str) -> str:
+            return f"{{{NS_A}}}{local}"
+
+        # spPr 탐색
+        sp_pr = sp_elm.find(f"{{{NS_P}}}spPr") or sp_elm.find(_tag_a("spPr"))
+        if sp_pr is None:
+            # p:sp 구조에서 직접 탐색
+            for child in sp_elm:
+                if child.tag.endswith("}spPr"):
+                    sp_pr = child
+                    break
+        if sp_pr is None:
+            return
+
+        # 도형 종류 + flipH/flipV — prstGeom & xfrm
+        border_radius = "0%"
+        clip_path: str | None = None
+
+        # xfrm에서 뒤집기 정보 추출 — 네임스페이스 무관 탐색
+        xfrm = None
+        for _child in sp_pr:
+            local = _child.tag.split("}")[-1] if "}" in _child.tag else _child.tag
+            if local == "xfrm":
+                xfrm = _child
+                break
+        flip_h = xfrm is not None and xfrm.get("flipH") in ("1", "true")
+        flip_v = xfrm is not None and xfrm.get("flipV") in ("1", "true")
+        # 180도 회전(rot=10800000)도 flipV와 동일 효과
+        if xfrm is not None and not flip_v:
+            rot_val = xfrm.get("rot", "0")
+            try:
+                rot_deg = int(rot_val) / 60000.0
+                if abs(rot_deg - 180.0) < 1.0:
+                    flip_v = True
+                elif abs(rot_deg - 90.0) < 1.0 or abs(rot_deg - 270.0) < 1.0:
+                    flip_h = True
+            except (ValueError, ZeroDivisionError):
+                pass
+
+        prstGeom = sp_pr.find(_tag_a("prstGeom"))
+        if prstGeom is not None:
+            prst = prstGeom.get("prst", "")
+            if prst in ("ellipse", "circle"):
+                border_radius = "50%"
+            elif prst in ("roundRect", "round1Rect", "round2SameRect"):
+                border_radius = "12px"
+            elif prst == "triangle":
+                # 기본 삼각형: 위쪽 꼭짓점 (∧)
+                # flipV → 아래 꼭짓점 (∨), flipH → 좌우 반전
+                if flip_v:
+                    clip_path = "polygon(0% 0%, 100% 0%, 50% 100%)"
+                elif flip_h:
+                    clip_path = "polygon(100% 0%, 0% 50%, 100% 100%)"
+                else:
+                    clip_path = "polygon(50% 0%, 100% 100%, 0% 100%)"
+            elif prst == "rtTriangle":
+                if flip_h:
+                    clip_path = "polygon(100% 0%, 0% 100%, 100% 100%)"
+                else:
+                    clip_path = "polygon(0% 0%, 100% 100%, 0% 100%)"
+            elif prst in ("rightArrow", "leftArrow"):
+                # 화살표: 단순 오각형으로 근사
+                if prst == "rightArrow":
+                    clip_path = "polygon(0% 25%, 70% 25%, 70% 0%, 100% 50%, 70% 100%, 70% 75%, 0% 75%)"
+                else:
+                    clip_path = "polygon(100% 25%, 30% 25%, 30% 0%, 0% 50%, 30% 100%, 30% 75%, 100% 75%)"
+            elif prst in ("pentagon", "hexagon"):
+                if prst == "pentagon":
+                    clip_path = "polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)"
+                else:
+                    clip_path = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)"
+            elif prst == "diamond":
+                clip_path = "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)"
+            elif prst == "parallelogram":
+                clip_path = "polygon(25% 0%, 100% 0%, 75% 100%, 0% 100%)"
+
+        # 채우기 색상 추출
+        fill_color: str | None = None
+        fill_opacity: float = 1.0
+
+        # solidFill
+        solid = sp_pr.find(_tag_a("solidFill"))
+        if solid is not None:
+            srgb = solid.find(_tag_a("srgbClr"))
+            if srgb is not None:
+                val = srgb.get("val", "")
+                if len(val) == 6:
+                    # 투명도(alpha) 확인
+                    alpha_elm = srgb.find(_tag_a("alpha"))
+                    if alpha_elm is not None:
+                        try:
+                            fill_opacity = int(alpha_elm.get("val", "100000")) / 100000.0
+                        except ValueError:
+                            pass
+                    fill_color = f"#{val.lower()}"
+            # schemeClr(테마 색상): 직접 해석 어려우므로 스킵
+        else:
+            # gradFill: 첫 번째 stop 색상 사용
+            grad = sp_pr.find(_tag_a("gradFill"))
+            if grad is not None:
+                gsLst = grad.find(_tag_a("gsLst"))
+                if gsLst is not None:
+                    for gs in gsLst:
+                        srgb = gs.find(_tag_a("srgbClr"))
+                        if srgb is None:
+                            # solidFill 등 내부 탐색
+                            for c in gs:
+                                srgb = c.find(_tag_a("srgbClr")) if c is not None else None
+                                if srgb is not None:
+                                    break
+                        if srgb is not None:
+                            val = srgb.get("val", "")
+                            if len(val) == 6:
+                                fill_color = f"#{val.lower()}"
+                                break
+
+        # 테마 XML 획득: ZIP 직접 추출 > part 체인
+        _theme_elm = global_theme_elm or _get_theme_elm(shape)
+
+        # schemeClr solidFill 폴백: 테마 색상으로 해석 시도
+        if fill_color is None:
+            solid = sp_pr.find(_tag_a("solidFill"))
+            if solid is not None:
+                schm = solid.find(_tag_a("schemeClr"))
+                if schm is not None:
+                    scheme_name = schm.get("val", "")
+                    resolved = _resolve_scheme_color(scheme_name, _theme_elm, NS_A)
+                    if resolved:
+                        # luminance modifiers (lumMod, lumOff) 적용
+                        # OOXML: lumMod/lumOff 값은 100000 = 100%
+                        # lumMod: 현재 밝기에 곱함 (50000 = 50%로 어둡게)
+                        # lumOff: 밝기에 더함 (50000 = +50% 밝게)
+                        try:
+                            import colorsys
+                            children = list(schm)
+                            mods: dict[str, int] = {}
+                            for c in children:
+                                local = c.tag.split("}")[-1] if "}" in c.tag else c.tag
+                                val_str = c.get("val", "0")
+                                try:
+                                    mods[local] = int(val_str)
+                                except ValueError:
+                                    pass
+                            if mods:
+                                hex_val = resolved.lstrip("#")
+                                r, g, b = (int(hex_val[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+                                h, l, s = colorsys.rgb_to_hls(r, g, b)
+                                if "lumMod" in mods:
+                                    l = l * mods["lumMod"] / 100000.0
+                                if "lumOff" in mods:
+                                    l = l + mods["lumOff"] / 100000.0
+                                if "shade" in mods:
+                                    l = l * mods["shade"] / 100000.0
+                                if "tint" in mods:
+                                    l = l + (1.0 - l) * mods["tint"] / 100000.0
+                                l = max(0.0, min(1.0, l))
+                                r2, g2, b2 = colorsys.hls_to_rgb(h, l, s)
+                                resolved = "#{:02x}{:02x}{:02x}".format(
+                                    int(r2 * 255), int(g2 * 255), int(b2 * 255)
+                                )
+                        except Exception:
+                            pass
+                        fill_color = resolved
+
+        # noFill인지 확인: noFill이 있으면 진짜로 투명, 없으면 scheme 기반 폴백 사용
+        if fill_color is None:
+            has_no_fill = sp_pr.find(_tag_a("noFill")) is not None
+            if not has_no_fill:
+                # solidFill에 schemeClr이 있지만 해석 실패한 경우 → scheme 이름 기반 폴백
+                solid2 = sp_pr.find(_tag_a("solidFill"))
+                if solid2 is not None:
+                    schm2 = solid2.find(_tag_a("schemeClr"))
+                    if schm2 is not None:
+                        sname = schm2.get("val", "")
+                        # 어두운 계열 → 중간 회색 폴백
+                        dark_schemes = {"dk1", "dk2", "bg2", "tx2"}
+                        light_schemes = {"lt1", "lt2", "bg1", "tx1"}
+                        if sname in dark_schemes:
+                            fill_color = "#6b7280"
+                        elif sname in light_schemes:
+                            fill_color = "#d1d5db"
+                        elif sname.startswith("accent"):
+                            # 테마 accent 색상을 못 읽은 경우 중립 파란색
+                            fill_color = "#3b82f6"
+
+        # 채우기 없으면 stroke-only 도형 시도
+        if fill_color is None:
+            line_color = _extract_line_color_from_sppr(sp_pr, NS_A, _theme_elm)
+            if line_color and not line_color.startswith("scheme:"):
+                try:
+                    w = shape.width
+                    h = shape.height
+                except Exception:
+                    return
+                if w > 0 and h > 0:
+                    elements.append(
+                        {
+                            "type": "shape",
+                            "style": {
+                                "left": _pct(abs_l, slide_w),
+                                "top": _pct(abs_t, slide_h),
+                                "width": _pct(w, slide_w),
+                                "height": _pct(h, slide_h),
+                                "fillColor": "transparent",
+                                "fillOpacity": "1",
+                                "borderRadius": border_radius,
+                                "strokeColor": line_color,
+                            },
+                        }
+                    )
+            return
+        if fill_color.lower() in ("#ffffff", "#fff", "#fefefe", "#fdfdfd"):
+            return
+        if fill_opacity < 0.05:
+            return
+
+        try:
+            width = shape.width
+            height = shape.height
+        except Exception:
+            return
+        if width <= 0 or height <= 0:
+            return
+
+        opacity_str = f"{fill_opacity:.3f}" if fill_opacity < 1.0 else "1"
+        shape_style: dict[str, Any] = {
+            "left": _pct(abs_l, slide_w),
+            "top": _pct(abs_t, slide_h),
+            "width": _pct(width, slide_w),
+            "height": _pct(height, slide_h),
+            "fillColor": fill_color,
+            "fillOpacity": opacity_str,
+            "borderRadius": border_radius,
+        }
+        if clip_path:
+            shape_style["clipPath"] = clip_path
+        # 디버깅: prst + flip 정보
+        if prstGeom is not None:
+            _prst = prstGeom.get("prst", "")
+            if _prst:
+                shape_style["_prst"] = _prst
+        if xfrm is not None:
+            _fh = xfrm.get("flipH")
+            _fv = xfrm.get("flipV")
+            _rot = xfrm.get("rot")
+            if _fh:
+                shape_style["_flipH"] = _fh
+            if _fv:
+                shape_style["_flipV"] = _fv
+            if _rot:
+                shape_style["_rot"] = _rot
+        elements.append({"type": "shape", "style": shape_style})
+    except Exception:
+        pass
 
 
 def _extract_text_style_from_tbl_xml(tbl_elm: Any, slide_w: int) -> dict[str, Any]:
@@ -1369,10 +2036,31 @@ def _slide_zip_package_enrich(
     return img_idx, stats
 
 
+def _load_theme_elm_from_zip(content: bytes) -> Any:
+    """
+    PPTX ZIP에서 ppt/theme/theme*.xml 을 직접 읽어 ElementTree 엘리먼트를 반환.
+    python-pptx part 체인과 무관하게 동작하므로 SmartArt/그룹 도형에서도 안정적.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as z:
+            theme_names = sorted(
+                n for n in z.namelist()
+                if n.startswith("ppt/theme/") and n.endswith(".xml")
+            )
+            if not theme_names:
+                return None
+            return ET.fromstring(z.read(theme_names[0]))
+    except Exception:
+        return None
+
+
 def parse_presentation(content: bytes) -> dict[str, Any]:
     prs = Presentation(io.BytesIO(content))
     slide_w = prs.slide_width
     slide_h = prs.slide_height
+
+    # 테마 XML을 ZIP에서 직접 추출 (part 체인보다 안정적)
+    global_theme_elm = _load_theme_elm_from_zip(content)
 
     all_plain: list[str] = []
     slides_out: list[dict[str, Any]] = []
@@ -1393,9 +2081,8 @@ def parse_presentation(content: bytes) -> dict[str, Any]:
         slide_part = slide.part
         used_blip_rids: set[str] = set()
 
-        for shape, grp_l, grp_t in _iter_shapes_paint_order(slide):
-            abs_l = int(shape.left) + grp_l
-            abs_t = int(shape.top) + grp_t
+        # _iter_shapes_placed가 이제 슬라이드 절대 EMU를 직접 반환
+        for shape, abs_l, abs_t in _iter_shapes_paint_order(slide):
 
             st = _shape_type_safe(shape)
             skip_blip_after_picture = False
@@ -1451,7 +2138,46 @@ def parse_presentation(content: bytes) -> dict[str, Any]:
                             image_fps,
                         )
 
+            # 표 도형 → type: "table" 구조 추출
+            if getattr(shape, "has_table", False):
+                try:
+                    rows_data: list[list[str]] = []
+                    for row in shape.table.rows:
+                        cells_data: list[str] = []
+                        for cell in row.cells:
+                            try:
+                                txt_cell = (cell.text_frame.text or "").strip()
+                            except Exception:
+                                txt_cell = (getattr(cell, "text", "") or "").strip()
+                            cells_data.append(txt_cell)
+                        rows_data.append(cells_data)
+                    if rows_data:
+                        flat_text = "\n".join(" | ".join(r) for r in rows_data)
+                        slide_text_parts.append(flat_text)
+                        elements.append({
+                            "type": "table",
+                            "rows": rows_data,
+                            "style": {
+                                "left": _pct(abs_l, slide_w),
+                                "top": _pct(abs_t, slide_h),
+                                "width": _pct(shape.width, slide_w),
+                                "height": _pct(shape.height, slide_h),
+                            },
+                        })
+                        continue  # 표는 text 경로로 다시 처리하지 않음
+                except Exception:
+                    pass
+
+            # 채워진 도형·커넥터 추출 (텍스트 유무와 무관하게 배경 fill 시도)
             txt = _shape_text(shape)
+            if not txt.strip():
+                _try_extract_connector_shape(
+                    shape, abs_l, abs_t, slide_w, slide_h, elements, global_theme_elm
+                )
+            # 텍스트가 있어도 배경 fill이 있으면 shape 요소로 추가 (조직도 노드 등)
+            _try_extract_filled_shape(
+                shape, abs_l, abs_t, slide_w, slide_h, elements, global_theme_elm
+            )
             if txt.strip():
                 slide_text_parts.append(txt.strip())
             if txt.strip():
@@ -1460,21 +2186,25 @@ def parse_presentation(content: bytes) -> dict[str, Any]:
                 width_pct = _pct(shape.width, slide_w)
                 height_pct = _pct(shape.height, slide_h)
                 text_style = _extract_text_style(shape, slide_w)
+                para_styles = _extract_paragraph_styles(shape, slide_w)
                 style: dict[str, Any] = {
                     "left": left_pct,
                     "top": top_pct,
                     "width": width_pct,
                     "height": height_pct,
                 }
-                # 추출된 스타일 병합 (fontSize, color, bold, italic, underline, fontFamily, textAlign)
                 style.update(text_style)
-                elements.append(
-                    {
-                        "type": "text",
-                        "content": txt,
-                        "style": style,
-                    }
-                )
+                elem: dict[str, Any] = {
+                    "type": "text",
+                    "content": txt,
+                    "style": style,
+                }
+                # 단락별 스타일이 실질적으로 다양할 때만 포함 (단일 스타일이면 불필요)
+                non_empty = [p for p in para_styles if p]
+                unique_styles = {tuple(sorted(p.items())) for p in non_empty}
+                if len(unique_styles) > 1:
+                    elem["paragraphStyles"] = para_styles
+                elements.append(elem)
 
         try:
             lo = slide.slide_layout

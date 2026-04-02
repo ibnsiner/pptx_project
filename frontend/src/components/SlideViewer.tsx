@@ -35,6 +35,10 @@ function normalizeFontSize(raw: string | undefined): string {
 
 function sortElementsForPaintOrder(elements: SlideElement[]): SlideElement[] {
   return [...elements].sort((a, b) => {
+    // shape(채워진 도형)는 항상 text/image 아래에 그림
+    const typeOrder = (e: SlideElement) => (e.type === "shape" ? 0 : 1);
+    const to = typeOrder(a) - typeOrder(b);
+    if (to !== 0) return to;
     const tb = parsePercent(b.style.top);
     const ta = parsePercent(a.style.top);
     if (tb !== ta) return tb - ta;
@@ -124,7 +128,111 @@ export function SlideViewer({
     >
       {ordered.map((el, index) => {
         const isImage = el.type === "image";
+        const isShape = el.type === "shape";
         const s = el.style;
+
+        // 표 — HTML table 렌더링
+        if (el.type === "table" && el.rows) {
+          const hasHeader = el.rows.length > 1;
+          return (
+            <div
+              key={index}
+              style={{
+                position: "absolute",
+                left: s.left,
+                top: s.top,
+                width: s.width,
+                minHeight: s.height,
+                zIndex: 10 + index,
+                overflow: "hidden",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: normalizeFontSize(s.fontSize) ?? "1.2cqw",
+                  fontFamily: s.fontFamily ?? undefined,
+                  tableLayout: "fixed",
+                }}
+              >
+                <tbody>
+                  {el.rows.map((row, ri) => (
+                    <tr key={ri}>
+                      {row.map((cell, ci) => {
+                        const isHead = ri === 0 && hasHeader;
+                        const Tag = isHead ? "th" : "td";
+                        return (
+                          <Tag
+                            key={ci}
+                            style={{
+                              border: "1px solid #555",
+                              padding: "0.3em 0.5em",
+                              textAlign: "center",
+                              verticalAlign: "middle",
+                              backgroundColor: isHead ? "rgba(0,0,0,0.12)" : "transparent",
+                              fontWeight: isHead ? 600 : undefined,
+                              wordBreak: "keep-all",
+                              overflowWrap: "anywhere",
+                            }}
+                          >
+                            {cell}
+                          </Tag>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+
+        // 채워진 도형 / 커넥터 선 / 삼각형 등 — CSS로 표현
+        if (isShape) {
+          const fillColor = (s as any).fillColor ?? "transparent";
+          const fillOpacity = parseFloat((s as any).fillOpacity ?? "1");
+          const borderRadius = (s as any).borderRadius ?? "0%";
+          const strokeColor = (s as any).strokeColor as string | undefined;
+          const clipPath = (s as any).clipPath as string | undefined;
+          const isLine = Boolean((s as any).isLine);
+          const heightVal = parseFloat(s.height ?? "0");
+          const widthVal = parseFloat(s.width ?? "0");
+          const effectiveHeight =
+            isLine && heightVal < 0.2 ? "0.25%" : s.height;
+          // 수직선: width=0% 이면 최소 너비 부여
+          const effectiveWidth =
+            isLine && widthVal < 0.2 ? "0.25%" : s.width;
+          // 흰색 라인은 짙은 배경용이므로 HTML(흰 배경)에서는 연한 회색으로 대체
+          const visibleFill =
+            fillColor === "#ffffff" || fillColor === "#fff"
+              ? "rgba(0,0,0,0.15)"
+              : fillColor === "transparent"
+                ? "transparent"
+                : fillColor;
+          return (
+            <div
+              key={index}
+              style={{
+                position: "absolute",
+                left: s.left,
+                top: s.top,
+                width: effectiveWidth,
+                height: effectiveHeight,
+                backgroundColor: visibleFill,
+                opacity: fillOpacity,
+                // clipPath가 있으면 borderRadius 무시 (삼각형 등)
+                borderRadius: clipPath ? undefined : borderRadius,
+                clipPath: clipPath ?? undefined,
+                border: strokeColor ? `2px solid ${strokeColor}` : undefined,
+                zIndex: 5 + index,
+                pointerEvents: "none",
+              }}
+              aria-hidden
+            />
+          );
+        }
+
         return (
           <div
             key={index}
@@ -134,8 +242,6 @@ export function SlideViewer({
               left: s.left,
               top: s.top,
               width: s.width,
-              // 텍스트는 minHeight: PPT는 기본적으로 텍스트가 박스 아래로 넘쳐도 표시됨
-              // 이미지는 height 고정 + overflow hidden 으로 박스 안에 맞춤
               ...(isImage
                 ? { height: s.height, overflow: "hidden" }
                 : { minHeight: s.height, overflow: "visible" }),
@@ -155,20 +261,51 @@ export function SlideViewer({
             }}
           >
             {el.type === "text" && el.content ? (
-              <span
-                className="min-h-0 min-w-0 max-w-full whitespace-pre-wrap break-words"
-                style={{
-                  color: s.color ?? undefined,
-                  fontWeight: s.bold ? 700 : undefined,
-                  fontStyle: s.italic ? "italic" : undefined,
-                  textDecoration: s.underline ? "underline" : undefined,
-                  fontFamily: s.fontFamily ?? undefined,
-                  textAlign: s.textAlign ?? "left",
-                  width: "100%",
-                }}
-              >
-                {normalizeSlideText(el.content)}
-              </span>
+              el.paragraphStyles ? (
+                // 단락별 스타일 적용: \n 기준 분리, \u000b는 줄바꿈
+                <span className="min-h-0 min-w-0 max-w-full whitespace-pre-wrap break-words" style={{ width: "100%" }}>
+                  {normalizeSlideText(el.content).split("\n").map((para, pi) => {
+                    const ps = el.paragraphStyles![pi] ?? {};
+                    // 단락에 명시된 color가 없으면 첫 단락과 같은 스타일이 아닌 경우
+                    // 부모 color를 상속하지 않고 기본 텍스트 색(inherit)을 사용한다.
+                    // 이렇게 해야 제목(주황)과 본문(흰색/기본)을 구분할 수 있다.
+                    const isFirstStyle = pi === 0;
+                    const effectiveColor = ps.color ?? (isFirstStyle ? s.color : undefined);
+                    return (
+                      <span
+                        key={pi}
+                        style={{
+                          display: "block",
+                          color: effectiveColor || undefined,
+                          fontWeight: ps.bold != null ? (ps.bold ? 700 : 400) : (isFirstStyle && s.bold ? 700 : undefined),
+                          fontStyle: (ps.italic ?? (isFirstStyle ? s.italic : undefined)) ? "italic" : undefined,
+                          textDecoration: (ps.underline ?? (isFirstStyle ? s.underline : undefined)) ? "underline" : undefined,
+                          fontFamily: ps.fontFamily ?? s.fontFamily ?? undefined,
+                          textAlign: ps.textAlign ?? s.textAlign ?? "left",
+                          fontSize: ps.fontSize ? normalizeFontSize(ps.fontSize) : (isFirstStyle ? normalizeFontSize(s.fontSize) : undefined),
+                        }}
+                      >
+                        {para || "\u00a0"}
+                      </span>
+                    );
+                  })}
+                </span>
+              ) : (
+                <span
+                  className="min-h-0 min-w-0 max-w-full whitespace-pre-wrap break-words"
+                  style={{
+                    color: s.color ?? undefined,
+                    fontWeight: s.bold ? 700 : undefined,
+                    fontStyle: s.italic ? "italic" : undefined,
+                    textDecoration: s.underline ? "underline" : undefined,
+                    fontFamily: s.fontFamily ?? undefined,
+                    textAlign: s.textAlign ?? "left",
+                    width: "100%",
+                  }}
+                >
+                  {normalizeSlideText(el.content)}
+                </span>
+              )
             ) : null}
             {isImage && el.src ? <SlideRaster src={el.src} /> : null}
             {isImage && !el.src && el.skipReason ? (
