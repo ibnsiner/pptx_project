@@ -85,6 +85,7 @@ export default function AdminUploadPage() {
   const titleEditedByUser = useRef(false);
   const [descModalOpen, setDescModalOpen] = useState(false);
   const [jsonCopied, setJsonCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<"inspect" | "publish">("inspect");
   const previewCardRef = useRef<HTMLDivElement>(null);
   const [previewColumnHeightPx, setPreviewColumnHeightPx] = useState<
     number | null
@@ -349,6 +350,208 @@ export default function AdminUploadPage() {
       ) : null}
 
       {hasParsedData ? (
+        <>
+        {/* ── 탭 바 ── */}
+        <div className="mb-5 flex gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("inspect")}
+            className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
+              activeTab === "inspect"
+                ? "bg-white text-zinc-900 shadow-sm"
+                : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            검수 (Inspect)
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("publish")}
+            className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
+              activeTab === "publish"
+                ? "bg-white text-zinc-900 shadow-sm"
+                : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            퍼블리시 뷰
+          </button>
+        </div>
+
+        {/* ── 퍼블리시 뷰 탭 ── */}
+        {activeTab === "publish" ? (
+          <div className="flex flex-col gap-4">
+            {/* 슬라이드 네비 */}
+            <div className="flex items-center justify-between">
+              <nav className="flex items-center gap-2" aria-label="슬라이드 이동">
+                <button
+                  type="button"
+                  disabled={!canPrevSlide}
+                  onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
+                  aria-label="이전 슬라이드"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:bg-zinc-50 disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                    <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                <span className="min-w-[5rem] select-none text-center text-sm tabular-nums text-zinc-600">
+                  <span className="font-semibold text-zinc-800">{slideIndex + 1}</span>
+                  <span className="text-zinc-400"> / </span>
+                  {slides.length}
+                </span>
+                <button
+                  type="button"
+                  disabled={!canNextSlide}
+                  onClick={() => setSlideIndex((i) => Math.min(slides.length - 1, i + 1))}
+                  aria-label="다음 슬라이드"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:bg-zinc-50 disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                    <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </nav>
+              <span className="text-xs text-zinc-400">
+                슬라이드 {current?.slideNumber} — 래스터 배경 + 텍스트 오버레이
+              </span>
+              {/* 최종 등록 버튼 (추후 구현) */}
+              <button
+                type="button"
+                disabled
+                className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white opacity-40"
+                title="DB 저장 기능 구현 예정"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                  <path fillRule="evenodd" d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.25 4.5a.75.75 0 0 0-1.5 0v2.25H7.5a.75.75 0 0 0 0 1.5h2.25V11.5a.75.75 0 0 0 1.5 0V9.25H13.5a.75.75 0 0 0 0-1.5h-2.25V5.5Z" clipRule="evenodd" />
+                </svg>
+                최종 등록
+              </button>
+            </div>
+
+            {/* 퍼블리시 뷰 캔버스: 래스터 배경 + 텍스트 오버레이 */}
+            {current ? (
+              <div
+                className="relative isolate h-0 w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md"
+                style={{ paddingBottom: `${slideCanvasPaddingBottomPct}%` }}
+              >
+                {/* 배경: 래스터 이미지 */}
+                {current.rasterPreview ? (
+                  // object-fill: 컨테이너 = 슬라이드 비율(paddingBottom)로 맞췄으므로
+                  // 이미지가 정확히 채워져 오버레이 좌표계와 일치
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={current.rasterPreview}
+                    alt=""
+                    className="absolute inset-0 h-full w-full"
+                    style={{ objectFit: "fill" }}
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-zinc-900" />
+                )}
+
+                {/* 텍스트·표 오버레이: 투명하지만 DOM에 존재 (검색·RAG·접근성) */}
+                <div
+                  className="absolute inset-0"
+                  style={{ containerType: "inline-size" }}
+                >
+                  {(() => {
+                    const elements = current.elements ?? [];
+                    // 표와 같은 위치의 중복 text 요소를 건너뜀
+                    const tablePositions = new Set(
+                      elements
+                        .filter((el) => el.type === "table")
+                        .map((el) => `${el.style.left}|${el.style.top}`)
+                    );
+                    return elements.map((el, i) => {
+                      const posKey = `${el.style.left}|${el.style.top}`;
+                      // 표 요소 → 투명 <table>로 렌더링
+                      if (el.type === "table" && el.rows) {
+                        return (
+                          <table
+                            key={i}
+                            style={{
+                              position: "absolute",
+                              left: el.style.left,
+                              top: el.style.top,
+                              width: el.style.width,
+                              height: el.style.height,
+                              borderCollapse: "collapse",
+                              tableLayout: "fixed",
+                              color: "transparent",
+                              userSelect: "text",
+                              cursor: "text",
+                              zIndex: 10,
+                              fontSize: "1.2cqw",
+                            }}
+                          >
+                            <tbody>
+                              {el.rows.map((row, ri) => (
+                                <tr key={ri}>
+                                  {row.map((cell, ci) => (
+                                    <td
+                                      key={ci}
+                                      style={{
+                                        border: "1px solid transparent",
+                                        padding: "0.3em 0.5em",
+                                        verticalAlign: "middle",
+                                        wordBreak: "break-word",
+                                        whiteSpace: "pre-wrap",
+                                      }}
+                                    >
+                                      {cell}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        );
+                      }
+                      // 텍스트 요소 (표와 중복 위치는 제외)
+                      if (el.type === "text" && el.content && !tablePositions.has(posKey)) {
+                        return (
+                          <span
+                            key={i}
+                            style={{
+                              position: "absolute",
+                              left: el.style.left,
+                              top: el.style.top,
+                              width: el.style.width,
+                              minHeight: el.style.height,
+                              fontSize: el.style.fontSize
+                                ? `calc(${el.style.fontSize} * 0.9)`
+                                : "1.2cqw",
+                              fontFamily: el.style.fontFamily ?? undefined,
+                              textAlign: el.style.textAlign ?? "left",
+                          color: "transparent",
+                          userSelect: "text",
+                          cursor: "text",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                          lineHeight: 1.2,
+                          zIndex: 10,
+                            }}
+                          >
+                            {el.content}
+                          </span>
+                        );
+                      }
+                      return null;
+                    });
+                  })()}
+                </div>
+              </div>
+            ) : null}
+
+            <p className="text-center text-xs text-zinc-400">
+              래스터 이미지(PowerPoint 렌더링)를 배경으로 표시합니다. 텍스트는 투명 오버레이로 선택·복사 가능합니다.
+            </p>
+          </div>
+        ) : null}
+
+        {/* ── 검수 탭 — 3단 그리드 ── */}
+        {activeTab === "inspect" ? (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,22rem)] lg:items-stretch">
 
           {/* ── 좌: 메타데이터 카드 ── */}
@@ -653,6 +856,8 @@ export default function AdminUploadPage() {
             ) : null}
           </aside>
         </div>
+        ) : null}
+        </>
       ) : null}
 
       {/* 업로드 드롭존 */}
