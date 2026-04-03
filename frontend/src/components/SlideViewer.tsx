@@ -85,10 +85,16 @@ export function SlideViewer({
   aspectRatio = "16 / 9",
   canvasPaddingBottomPercent,
 }: Props) {
-  const ordered = useMemo(
-    () => sortElementsForPaintOrder(elements ?? []),
-    [elements],
-  );
+  const { ordered, tablePositions } = useMemo(() => {
+    const all = sortElementsForPaintOrder(elements ?? []);
+    // 표와 같은 위치의 text 요소(평문 중복)를 건너뛰기 위해 위치 Set 구성
+    const tablePositions = new Set(
+      all
+        .filter((el) => el.type === "table")
+        .map((el) => `${el.style.left}|${el.style.top}`),
+    );
+    return { ordered: all, tablePositions };
+  }, [elements]);
 
   const canvasBoxStyle =
     canvasPaddingBottomPercent != null
@@ -130,6 +136,10 @@ export function SlideViewer({
         const isImage = el.type === "image";
         const isShape = el.type === "shape";
         const s = el.style;
+        const posKey = `${s.left}|${s.top}`;
+
+        // 표와 같은 위치의 text 요소는 중복이므로 건너뜀
+        if (el.type === "text" && tablePositions.has(posKey)) return null;
 
         // 표 — HTML table 렌더링
         if (el.type === "table" && el.rows) {
